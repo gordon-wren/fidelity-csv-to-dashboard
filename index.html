@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fidelity Contribution Tracker</title>
+<style>
+/* Layout idea: one column of cards, summary first, charts next, detail tables last. Everything reads at 380px. */
+:root{
+  color-scheme:light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --wash:rgba(11,11,11,.05);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --good:#006300;
+  --font:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.06);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --good:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.06);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --good:#0ca30c;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font:15px/1.45 var(--font);-webkit-text-size-adjust:100%}
+main{max-width:980px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:22px;line-height:1.2;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:15px;margin:0;font-weight:650}
+p{margin:0}
+.sub{color:var(--ink-2);font-size:13px}
+.muted{color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.spread{justify-content:space-between}
+button,select,.filebtn{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:8px;padding:8px 12px;min-height:38px;cursor:pointer}
+button:hover,.filebtn:hover{background:var(--wash)}
+.primary{background:var(--ink);color:var(--page);border-color:var(--ink);font-weight:600;display:inline-flex;align-items:center}
+.primary:hover{background:var(--ink);opacity:.88}
+:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+.filebtn:focus-within{outline:2px solid var(--s1);outline-offset:2px}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border:1px dashed var(--axis);border-radius:999px;padding:3px 10px;color:var(--ink-2)}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.chip.live{border-style:solid}
+.chip.live::before{background:var(--good)}
+.err{color:var(--ink);border-left:3px solid var(--s2);padding:6px 10px;background:var(--wash);border-radius:4px;font-size:13px}
+.drop{outline:2px dashed var(--s1);outline-offset:-6px}
+.seg{display:inline-flex;border:1px solid var(--axis);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:36px;padding:6px 12px;background:transparent;color:var(--ink-2)}
+.seg button+button{border-left:1px solid var(--axis)}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--page);font-weight:600}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .k{font-size:12px;color:var(--ink-2)}
+.tile .v{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}
+.tile .n{font-size:12px;color:var(--ink-2)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.chart{position:relative}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+svg{display:block}
+svg text{font:11px var(--font);fill:var(--muted);font-variant-numeric:tabular-nums}
+svg text.val{fill:var(--ink-2)}
+.tip{position:absolute;top:0;left:0;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--axis);border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.4;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.14);display:none;z-index:2;font-variant-numeric:tabular-nums}
+.tip b{display:block}
+.lim{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--grid)}
+.lim:last-child{border-bottom:0}
+.lim .hd{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.lim .pct{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.meter{height:10px;border-radius:5px;background:var(--wash);overflow:hidden}
+.meter div{height:100%;background:var(--s1);border-radius:5px;min-width:2px}
+.meter.over div{background:#d03b3b}
+.lim .ln{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
+.lim input{font:inherit;width:96px;padding:4px 8px;min-height:32px;border:1px solid var(--axis);border-radius:8px;background:var(--surface);color:var(--ink)}
+.lim .st{font-size:13px;color:var(--ink-2)}
+.lim .st b{color:var(--ink)}
+.yr{font-size:13px;margin:10px 0 4px;display:flex;justify-content:space-between;gap:8px}
+.yr span{color:var(--ink-2)}
+.scale{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-2)}
+.scale i{width:11px;height:11px;border-radius:2px;display:inline-block}
+.klist{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px 20px;font-size:13px}
+.klist div{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.klist i{flex:none;width:10px;height:10px;border-radius:3px;align-self:center}
+.klist span{color:var(--ink-2);flex:1}
+.klist em{font-style:normal;color:var(--muted);font-size:12px}
+.tip span{display:flex;justify-content:space-between;gap:14px;color:var(--ink-2)}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
+th{font-weight:600;color:var(--ink-2);font-size:12px}
+th:first-child,td:first-child{text-align:left}
+.pivot th:first-child,.pivot td:first-child{position:sticky;left:0;background:var(--surface);font-weight:600}
+.pivot td.tot{font-weight:650}
+.pivot td.z{color:var(--muted)}
+.tx td:nth-child(2),.tx td:nth-child(3){text-align:left}
+.types{display:flex;flex-direction:column}
+.type{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:9px 0;border-bottom:1px solid var(--grid);align-items:center}
+.type .nm{font-size:13px;overflow-wrap:anywhere}
+.type .ct{font-size:12px;color:var(--ink-2)}
+.type select{min-height:34px;padding:4px 8px}
+summary{cursor:pointer;font-weight:650;font-size:15px}
+details>div{margin-top:10px}
+.empty{padding:28px 8px;text-align:center;color:var(--ink-2);font-size:14px}
+@media (prefers-reduced-motion:no-preference){button,.filebtn{transition:background .12s}}
+</style>
+</head>
+<body>
+<main>
+  <header class="row spread">
+    <div>
+      <h1>Fidelity Contribution Tracker</h1>
+      <p class="sub">Money you put in, by month, quarter and year, from your activity export.</p>
+    </div>
+  </header>
+
+  <section class="card" id="loader">
+    <div class="row">
+      <label class="filebtn primary" for="file">Choose CSV files<input id="file" type="file" accept=".csv,text/csv" multiple></label>
+      <button id="sample" type="button">Use sample data</button>
+      <span class="chip" id="state">Sample data</span>
+    </div>
+    <p class="sub" id="status">These numbers are made up. Load your own export to replace them.</p>
+    <div id="errors"></div>
+    <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
+  </section>
+
+  <section class="row" aria-label="Filters">
+    <label class="f" for="account">Account<select id="account"></select></label>
+    <label class="f" for="range">Period<select id="range"></select></label>
+    <div class="f"><span>Group by</span>
+      <div class="seg" id="gran" role="group" aria-label="Group by">
+        <button type="button" data-g="month" aria-pressed="true">Month</button>
+        <button type="button" data-g="quarter" aria-pressed="false">Quarter</button>
+        <button type="button" data-g="year" aria-pressed="false">Year</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card">
+    <div class="row spread">
+      <h2>Annual limit tracker</h2>
+      <label class="f" for="limYear">Tax year<select id="limYear"></select></label>
+    </div>
+    <p class="sub">All accounts, whatever the account filter says. Rollovers are not counted, and IRA deposits marked prior year count toward the year before. Limits are the under-50 amounts; type over one if catch-up applies to you.</p>
+    <div id="limits"></div>
+    <details>
+      <summary>Account types</summary>
+      <div>
+        <p class="sub">Guessed from each account name. Accounts of the same type share one limit.</p>
+        <div class="types" id="acctTypes"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="row spread">
+      <h2 id="barTitle">Contributions by month</h2>
+      <div class="legend" id="barLegend"></div>
+    </div>
+    <div class="chart" id="barWrap"><div class="scroll" id="bar"></div><div class="tip" id="barTip"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="row spread">
+      <h2>Running total, net of withdrawals</h2>
+      <span class="sub" id="lineNote"></span>
+    </div>
+    <div class="chart" id="lineWrap"><div id="line"></div><div class="tip" id="lineTip"></div></div>
+  </section>
+
+  <section class="card">
+    <div>
+      <h2>Year-over-year pace</h2>
+      <p class="sub" id="paceNote"></p>
+    </div>
+    <div class="chart" id="paceWrap"><div id="pace"></div><div class="tip" id="paceTip"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="row spread">
+      <h2>Consistency</h2>
+      <div class="scale" id="calScale"></div>
+    </div>
+    <div class="klist" id="streaks"></div>
+    <div class="chart" id="calWrap"><div id="cal"></div><div class="tip" id="calTip"></div></div>
+  </section>
+
+  <section class="card">
+    <div>
+      <h2 id="buyTitle">Purchases by type</h2>
+      <p class="sub">What you bought, split by kind of holding. Buys only: sales and reinvested dividends are not included.</p>
+    </div>
+    <div class="klist" id="buyLegend"></div>
+    <div class="chart" id="buyWrap"><div class="scroll" id="buy"></div><div class="tip" id="buyTip"></div></div>
+    <details>
+      <summary>How each holding is categorised</summary>
+      <div>
+        <p class="sub">Types are guessed from the ticker and name. Fix any that are wrong; your choices are remembered in this browser.</p>
+        <div class="types" id="secs"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="row spread">
+      <h2>Contributions by year and month</h2>
+      <button id="copy" type="button">Copy monthly totals</button>
+    </div>
+    <div class="scroll" id="pivot"></div>
+  </section>
+
+  <section class="card">
+    <details open>
+      <summary>How each transaction type is counted</summary>
+      <div>
+        <p class="sub">Each type in your file is counted as money in, money out, or left out. Change any that look wrong; your choices are remembered in this browser.</p>
+        <div class="types" id="types"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Counted transactions</h2>
+    <div class="scroll" id="tx"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+function h(tag, attrs, ...kids){
+  const e = document.createElement(tag);
+  for (const k in attrs || {}) {
+    const v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return e;
+}
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const usd = new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
+const usd2 = new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"});
+function compact(v){
+  const a = Math.abs(v), s = v < 0 ? "-" : "";
+  if (a >= 1e6) return s + "$" + +(a/1e6).toFixed(1) + "M";
+  if (a >= 1e3) return s + "$" + +(a/1e3).toFixed(1) + "k";
+  return s + "$" + Math.round(a);
+}
+
+/* ---------- parsing ---------- */
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", q = false;
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i+1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+function parseDate(s){
+  s = (s || "").trim();
+  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(s);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return ok(y, +m[1], +m[2]); }
+  m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return ok(+m[1], +m[2], +m[3]);
+  m = /^([A-Za-z]{3})[a-z]*[-\s](\d{1,2}),?[-\s](\d{4})/.exec(s);
+  if (m) { const i = MON.findIndex(x => x.toLowerCase() === m[1].toLowerCase()); if (i >= 0) return ok(+m[3], i+1, +m[2]); }
+  return null;
+  function ok(y, mo, d){ return (mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && y > 1970 && y < 2200) ? {y, m: mo, d} : null; }
+}
+function parseAmount(s){
+  s = (s || "").trim(); if (!s) return null;
+  const neg = /^\(.*\)$/.test(s) || /^-/.test(s) || /-$/.test(s);
+  const n = parseFloat(s.replace(/[^0-9.]/g, ""));
+  return isNaN(n) ? null : (neg ? -n : n);
+}
+// Known Fidelity action prefixes and how to count them by default.
+const PREFIXES = [
+  ["ELECTRONIC FUNDS TRANSFER RECEIVED","in"],["ELECTRONIC FUNDS TRANSFER PAID","out"],
+  ["DIRECT DEPOSIT","in"],["DIRECT DEBIT","out"],["CASH CONTRIBUTION","in"],["PARTIC CONTR","in"],
+  ["CO CONTR","in"],["EMPLOYER","in"],["CONTRIBUTION","in"],["ROLLOVER","in"],["CHECK RECEIVED","in"],
+  ["DEPOSIT","in"],["WIRE TRANSFER FROM","in"],["WIRE TRANSFER TO","out"],["CHECK PAID","out"],
+  ["NORMAL DISTR","out"],["EARLY DISTR","out"],["PREMATURE DISTR","out"],["WITHDRAWAL","out"],
+  ["DEBIT CARD PURCHASE","out"],["BILL PAYMENT","out"],
+  ["TRANSFERRED FROM","skip"],["TRANSFERRED TO","skip"],["YOU BOUGHT","skip"],["YOU SOLD","skip"],
+  ["DIVIDEND RECEIVED","skip"],["REINVESTMENT","skip"],["INTEREST EARNED","skip"],
+  ["LONG-TERM CAP GAIN","skip"],["SHORT-TERM CAP GAIN","skip"],["FOREIGN TAX PAID","skip"],
+  ["FEE CHARGED","skip"],["JOURNALED","skip"],["ROTH CONVERSION","skip"],["CHANGE IN MARKET VALUE","skip"],
+  ["EXCHANGE","skip"],["DIVIDEND","skip"],["REDEMPTION","skip"],["PURCHASE","skip"]
+].sort((a,b) => b[0].length - a[0].length);
+const DEFAULTS = Object.fromEntries(PREFIXES);
+function groupOf(action){
+  const u = (action || "").toUpperCase().replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
+  if (!u) return "(NO TYPE)";
+  for (const [p] of PREFIXES) if (u.startsWith(p)) return p;
+  return u.split(" ").slice(0, 3).join(" ");
+}
+function defaultCat(g){ return DEFAULTS[g] || (/CONTRIB|PAYROLL|MATCH/.test(g) ? "in" : "skip"); }
+
+// Holding types. Guessed from ticker shape and name; the viewer can override each one.
+const KINDS = [["stock","Individual stocks","--s1"],["etf","ETFs","--s2"],["fund","Mutual funds","--s3"],["other","Other","--s4"]];
+const ETFS = new Set("VTI VOO SPY QQQ QQQM IVV VXUS VEA VWO BND BNDX AGG VT VUG VTV VYM VIG VNQ VGT VB VO VBR IWM IWF IWD IJH IJR EFA EEM SCHD SCHB SCHX SCHF SCHG SCHA DIA GLD IAU SLV TLT SHY IEF ARKK XLK XLF XLE XLV XLY XLP XLI XLU JEPI JEPQ SGOV BIL FTEC FNILX SPLG SPYG SPYD RSP VGK AVUV DGRO ITOT IXUS IEFA IEMG SOXX SMH TQQQ".split(" "));
+ETFS.delete("FNILX");
+const BUYS = new Set(["YOU BOUGHT", "PURCHASE"]);
+function guessKind(sym, name){
+  const u = (name || "").toUpperCase();
+  if (!sym) return /\bETF\b/.test(u) ? "etf" : "fund";
+  if (/^[A-Z]{3}XX$/.test(sym)) return "skip";            // money market sweep
+  if (/^[A-Z]{4}X$/.test(sym)) return "fund";             // five letters ending in X
+  if (/^-/.test(sym) || /\d/.test(sym)) return "other";   // options, bonds, CUSIPs
+  if (ETFS.has(sym) || /\bETF\b|ISHARES|SPDR|PROSHARES|INVESCO QQQ|EXCHANGE[- ]TRADED/.test(u)) return "etf";
+  return "stock";
+}
+
+function ingestFile(name, text){
+  const rows = parseCSV(text);
+  let hi = -1, cols = null;
+  for (let i = 0; i < Math.min(rows.length, 60); i++) {
+    const lc = rows[i].map(c => c.trim().toLowerCase());
+    const d = lc.findIndex(c => /^(run date|date|trade date|transaction date)$/.test(c));
+    const a = lc.findIndex(c => /^amount/.test(c));
+    if (d >= 0 && a >= 0) {
+      const find = re => lc.findIndex(c => re.test(c));
+      let act = find(/^action$/); if (act < 0) act = find(/^transaction type$/); if (act < 0) act = find(/^description$/);
+      cols = {d, a, act, acct: find(/^account$/), num: find(/^account number$/), desc: find(/^(description|investment)$/), sym: find(/^symbol$/)};
+      cols.inv = cols.desc >= 0 && lc[cols.desc] === "investment";
+      hi = i; break;
+    }
+  }
+  if (hi < 0) return {error: "No header row with a Date column and an Amount column in " + name + ". Use the CSV from Activity & Orders, then Download."};
+  const base = name.replace(/\.[^.]+$/, "");
+  const out = []; let skipped = 0;
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length === 1 && !r[0].trim()) continue;
+    const date = parseDate(r[cols.d]), amount = parseAmount(r[cols.a]);
+    if (!date) { skipped++; continue; }
+    if (amount == null || amount === 0) continue;
+    const nm = cols.acct >= 0 ? (r[cols.acct] || "").trim() : "";
+    const num = cols.num >= 0 ? (r[cols.num] || "").trim() : "";
+    const account = nm && num ? nm + " ··" + num.slice(-4) : (nm || num || base);
+    const action = cols.act >= 0 ? (r[cols.act] || "").trim() : "";
+    const desc = cols.desc >= 0 && cols.desc !== cols.act ? (r[cols.desc] || "").trim() : "";
+    const sym = cols.sym >= 0 ? (r[cols.sym] || "").trim().toUpperCase() : "";
+    out.push({sym, sec: sym || (cols.inv ? desc : ""), secName: desc && !/^no description$/i.test(desc) ? desc : action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d, account, action,
+      group: groupOf(action), amount, desc});
+  }
+  return {rows: out, skipped};
+}
+function ingest(files){
+  const merged = new Map(), errors = []; let skipped = 0;
+  for (const f of files) {
+    const res = ingestFile(f.name, f.text);
+    if (res.error) { errors.push(res.error); continue; }
+    skipped += res.skipped;
+    const seen = new Map();
+    for (const r of res.rows) {
+      const k = [r.account, r.ord, r.action, r.amount, r.desc, r.sym].join("|");
+      const n = (seen.get(k) || 0) + 1; seen.set(k, n);
+      const m = merged.get(k) || []; if (n > m.length) { m.push(r); merged.set(k, m); }
+    }
+  }
+  return {rows: [...merged.values()].flat(), errors, skipped};
+}
+
+/* ---------- sample ---------- */
+function sampleCSV(){
+  const L = ["", "", "Run Date,Account,Account Number,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date"];
+  const add = (y, m, d, acct, num, action, amt, sym) => {
+    const dt = String(m).padStart(2,"0") + "/" + String(d).padStart(2,"0") + "/" + y;
+    L.push(` ${dt},${acct},${num},${action},${sym || ""},No Description,Cash,,,,,,${amt},,${dt}`);
+  };
+  for (let y = 2022; y <= 2026; y++) for (let m = 1; m <= 12; m++) {
+    if (y === 2026 && m > 10) break;
+    add(y, m, 15, "ROTH IRA", "X11112222", "CASH CONTRIBUTION CURRENT YEAR (Cash)", y === 2022 ? 500 : y === 2023 ? 541.66 : 583.33);
+    if ((m + y) % 4) add(y, m, 3, "Individual", "Z33334444", "Electronic Funds Transfer Received (Cash)", 300 + ((m*37 + y*13) % 5) * 150);
+    add(y, m, 16, "ROTH IRA", "X11112222", "YOU BOUGHT FIDELITY 500 INDEX FUND (FXAIX) (Cash)", y === 2022 ? -500 : y === 2023 ? -541.66 : -583.33, "FXAIX");
+    add(y, m, 5, "Individual", "Z33334444", "YOU BOUGHT VANGUARD TOTAL STOCK MKT ETF (VTI) (Cash)", -350, "VTI");
+    if (m % 2) add(y, m, 9, "Individual", "Z33334444", "YOU BOUGHT APPLE INC (AAPL) (Cash)", -150 - (m * 29 % 4) * 50, "AAPL");
+    if (m % 5 === 0) add(y, m, 12, "Individual", "Z33334444", "YOU BOUGHT NVIDIA CORPORATION (NVDA) (Cash)", -400, "NVDA");
+    if (m % 3 === 0) add(y, m, 28, "Individual", "Z33334444", "DIVIDEND RECEIVED VANGUARD TOTAL STOCK MKT ETF (VTI) (Cash)", 42.17, "VTI");
+    if ((y === 2023 && m === 8) || (y === 2025 && m === 3)) add(y, m, 20, "Individual", "Z33334444", "Electronic Funds Transfer Paid (Cash)", y === 2023 ? -2500 : -4000);
+  }
+  L.push("", '"Sample rows generated for demonstration."');
+  return L.join("\r\n");
+}
+
+/* ---------- state ---------- */
+const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false};
+try { S.overrides = JSON.parse(localStorage.getItem("fct-cats") || "{}") || {}; } catch (e) {}
+const catOf = g => S.overrides[g] || defaultCat(g);
+S.secs = {}; try { S.secs = JSON.parse(localStorage.getItem("fct-secs") || "{}") || {}; } catch (e) {}
+const kindOf = r => S.secs[r.sec] || guessKind(r.sym, r.secName);
+const isBuy = r => !!r.sec && (BUYS.has(r.group) || catOf(r.group) === "in");
+
+function load(files, isSample){
+  const res = ingest(files);
+  const errBox = $("#errors"); errBox.replaceChildren(...res.errors.map(e => h("p", {class: "err"}, e)));
+  if (!res.rows.length) {
+    if (!res.errors.length) errBox.append(h("p", {class: "err"}, "No dated rows with an amount were found in that file."));
+    return;
+  }
+  S.rows = res.rows.sort((a, b) => a.ord - b.ord); S.account = "all"; S.range = "all"; S.showAll = false;
+  const st = $("#state"); st.textContent = isSample ? "Sample data" : "Your data"; st.className = "chip" + (isSample ? "" : " live");
+  const a = S.rows[0].date, b = S.rows[S.rows.length-1].date;
+  $("#status").textContent = isSample ? "These numbers are made up. Load your own export to replace them."
+    : `${files.length - res.errors.length} file${files.length - res.errors.length === 1 ? "" : "s"}, ${S.rows.length.toLocaleString()} transactions, ${MON[a.m-1]} ${a.y} to ${MON[b.m-1]} ${b.y}.` + (res.skipped ? ` ${res.skipped} non-data line${res.skipped === 1 ? "" : "s"} skipped.` : "");
+  const accts = [...new Set(S.rows.map(r => r.account))].sort();
+  $("#account").replaceChildren(h("option", {value: "all"}, "All accounts"), ...accts.map(x => h("option", {value: x}, x)));
+  buildRanges(); buildLimYears(); render();
+}
+
+// Period choices come from the dates actually present for the selected account.
+function buildRanges(){
+  const rowsA = S.rows.filter(r => S.account === "all" || r.account === S.account);
+  if (!rowsA.length) return;
+  const a = rowsA[0], b = rowsA[rowsA.length-1], span = b.t - a.t + 1;
+  const opts = [h("option", {value: "all"}, `All: ${MON[a.date.m-1]} ${a.date.y} to ${MON[b.date.m-1]} ${b.date.y}`)];
+  if (span > 12) opts.push(h("option", {value: "12m"}, "Last 12 months"));
+  if (span > 36) opts.push(h("option", {value: "3y"}, "Last 3 years"));
+  const years = [...new Set(rowsA.map(r => r.date.y))].sort((x, y) => y - x);
+  if (years.length > 1) for (const y of years) opts.push(h("option", {value: "y:" + y}, String(y)));
+  const sel = $("#range"); sel.replaceChildren(...opts);
+  if (!opts.some(o => o.value === S.range)) S.range = "all";
+  sel.value = S.range;
+}
+
+/* ---------- limits ---------- */
+const LIMITS = {
+  ira:  {2022: 6000, 2023: 6500, 2024: 7000, 2025: 7000, 2026: 7500},
+  k401: {2022: 20500, 2023: 22500, 2024: 23000, 2025: 23500, 2026: 24500},
+  hsa1: {2022: 3650, 2023: 3850, 2024: 4150, 2025: 4300, 2026: 4400, 2027: 4500},
+  hsa2: {2022: 7300, 2023: 7750, 2024: 8300, 2025: 8550, 2026: 8750, 2027: 9000}
+};
+const LKINDS = [["ira","IRA, traditional and Roth combined"],["k401","401(k) or 403(b), your own deferrals"],["hsa1","HSA, self-only coverage"],["hsa2","HSA, family coverage"],["none","No annual limit"]];
+S.lim = {types: {}, custom: {}};
+try { const v = JSON.parse(localStorage.getItem("fct-lim") || "null"); if (v && v.types && v.custom) S.lim = v; } catch (e) {}
+const saveLim = () => { try { localStorage.setItem("fct-lim", JSON.stringify(S.lim)); } catch (e) {} };
+function acctKind(a){
+  if (S.lim.types[a]) return S.lim.types[a];
+  if (/HSA|HEALTH SAVINGS/i.test(a)) return "hsa1";
+  if (/\bIRA\b/i.test(a)) return "ira";
+  if (/401|403|457/.test(a)) return "k401";
+  return "none";
+}
+const taxYear = r => r.date.y - (/PRIOR YEAR/i.test(r.action) ? 1 : 0);
+function drawLimits(){
+  if (!S.rows.length) return;
+  const last = S.rows[S.rows.length - 1].date, Y = S.limYear, accts = [...new Set(S.rows.map(r => r.account))].sort();
+  const box = [];
+  for (const [kind, name] of LKINDS) {
+    if (kind === "none") continue;
+    const mine = accts.filter(a => acctKind(a) === kind); if (!mine.length) continue;
+    let sum = 0;
+    for (const r of S.rows) if (acctKind(r.account) === kind && catOf(r.group) === "in" && r.group !== "ROLLOVER" && taxYear(r) === Y) sum += r.amount;
+    const key = kind + ":" + Y, limit = S.lim.custom[key] != null ? S.lim.custom[key] : (LIMITS[kind][Y] || null);
+    const pct = limit ? sum / limit : 0, left = limit ? limit - sum : 0;
+    const input = h("input", {id: "lim-" + kind, type: "number", min: "0", step: "50", inputmode: "numeric", "aria-label": `${Y} limit for ${name}`, value: limit == null ? "" : limit, placeholder: "limit",
+      onchange: e => { const v = parseFloat(e.target.value); if (v > 0) S.lim.custom[key] = v; else delete S.lim.custom[key]; saveLim(); drawLimits(); }});
+    let st;
+    if (!limit) st = h("div", {class: "st"}, `No official ${Y} limit is built in yet. Enter it to see progress.`);
+    else if (left < -0.5) st = h("div", {class: "st"}, h("b", null, `\u26a0 Over by ${usd.format(-left)}. `), "Check for an excess contribution, or change a transaction type if something was counted by mistake.");
+    else if (left < 0.5) st = h("div", {class: "st"}, h("b", null, "\u2713 Maxed out."));
+    else if (Y < last.y) st = h("div", {class: "st"}, h("b", null, usd.format(left)), ` of ${Y} room went unused` + (kind === "ira" && Y === last.y - 1 && last.m < 4 ? `, though IRA deposits for ${Y} are allowed until the April ${Y + 1} tax deadline.` : "."));
+    else {
+      const ml = 12 - last.m;
+      st = h("div", {class: "st"}, h("b", null, usd.format(left) + " left. "), ml > 0 ? `${usd.format(left / ml)} a month for the ${ml} month${ml === 1 ? "" : "s"} after ${MON[last.m - 1]} would max it out.` : "December is the last month in your file.",
+        kind === "ira" ? ` IRA deposits for ${Y} are allowed until the April ${Y + 1} tax deadline.` : "");
+    }
+    box.push(h("div", {class: "lim"},
+      h("div", {class: "hd"}, h("div", null, h("strong", null, name), h("div", {class: "sub"}, mine.join(", "))), h("div", {class: "pct"}, limit ? Math.round(pct * 100) + "%" : "\u2013")),
+      h("div", {class: "meter" + (pct > 1.0001 ? " over" : ""), role: "img", "aria-label": limit ? `${Math.round(pct * 100)} percent of the limit used` : "No limit set"}, h("div", {style: `width:${Math.min(100, pct * 100)}%`})),
+      h("div", {class: "ln"}, h("strong", null, usd.format(sum)), "of", input, `in ${Y}`),
+      st));
+  }
+  $("#limits").replaceChildren(...(box.length ? box : [h("div", {class: "empty"}, "No IRA, 401(k) or HSA accounts were recognised. Set the type of each account below.")]));
+  $("#acctTypes").replaceChildren(...accts.map((a, i) => {
+    const sel = h("select", {id: "acct-" + i, "aria-label": "Type of account " + a, onchange: e => { S.lim.types[a] = e.target.value; saveLim(); drawLimits(); }}, LKINDS.map(([k, n]) => h("option", {value: k}, n)));
+    sel.value = acctKind(a);
+    return h("div", {class: "type"}, h("div", {class: "nm"}, a), sel);
+  }));
+}
+function buildLimYears(){
+  const ys = [...new Set(S.rows.map(taxYear))].sort((a, b) => b - a);
+  S.limYear = S.rows[S.rows.length - 1].date.y;
+  const sel = $("#limYear"); sel.replaceChildren(...ys.map(y => h("option", {value: y}, y))); sel.value = S.limYear;
+}
+
+/* ---------- compute ---------- */
+function compute(){
+  const rowsA = S.rows.filter(r => S.account === "all" || r.account === S.account);
+  const counted = rowsA.map(r => ({r, c: catOf(r.group)})).filter(x => x.c !== "skip");
+  if (!rowsA.length) return null;
+  const minT = rowsA[0].t, last = rowsA[rowsA.length-1], maxT = last.t;
+  let lo = minT, hi = maxT;
+  if (S.range === "12m") lo = Math.max(minT, maxT - 11);
+  if (S.range === "3y") lo = Math.max(minT, maxT - 35);
+  if (S.range.startsWith("y:")) { const yr = +S.range.slice(2); lo = Math.max(minT, yr * 12); hi = Math.min(maxT, yr * 12 + 11); }
+  const months = []; for (let t = lo; t <= hi; t++) months.push({t, in: 0, out: 0, buy: {stock: 0, etf: 0, fund: 0, other: 0}});
+  const buyTot = {stock: 0, etf: 0, fund: 0, other: 0};
+  for (const r of rowsA) if (r.t >= lo && r.t <= hi && isBuy(r)) { const k = kindOf(r); if (k !== "skip") { months[r.t - lo].buy[k] += Math.abs(r.amount); buyTot[k] += Math.abs(r.amount); } }
+  const allMonths = new Map();
+  for (const {r, c} of counted) {
+    const v = c === "in" ? r.amount : Math.abs(r.amount);
+    let m = allMonths.get(r.t); if (!m) allMonths.set(r.t, m = {in: 0, out: 0}); m[c] += v;
+    if (r.t >= lo && r.t <= hi) months[r.t - lo][c] += v;
+  }
+  const div = S.gran === "month" ? 1 : S.gran === "quarter" ? 3 : 12;
+  const periods = [];
+  for (const m of months) {
+    const k = Math.floor(m.t / div); let p = periods[periods.length-1];
+    if (!p || p.k !== k) periods.push(p = {k, in: 0, out: 0, label: label(k), buy: {stock: 0, etf: 0, fund: 0, other: 0}});
+    p.in += m.in; p.out += m.out; for (const q in m.buy) p.buy[q] += m.buy[q];
+  }
+  function label(k){
+    if (div === 1) return MON[k % 12] + " " + Math.floor(k / 12);
+    if (div === 3) return "Q" + (k % 4 + 1) + " " + Math.floor(k / 4);
+    return String(k);
+  }
+  // latest-year pace against the prior year through the same date
+  const ly = last.date.y, cut = last.date.m * 100 + last.date.d; let cur = 0, prev = 0;
+  for (const {r, c} of counted) if (c === "in") {
+    if (r.date.y === ly) cur += r.amount;
+    else if (r.date.y === ly - 1 && r.date.m * 100 + r.date.d <= cut) prev += r.amount;
+  }
+  return {buyTot, months, periods, allMonths, minT, maxT, last, lo, cur, prev, ly,
+    counted: counted.filter(x => x.r.t >= lo && x.r.t <= hi), rowsA,
+    totIn: months.reduce((s, m) => s + m.in, 0), totOut: months.reduce((s, m) => s + m.out, 0)};
+}
+
+/* ---------- render ---------- */
+function render(){
+  const C = compute(); if (!C) return;
+  const rangeName = S.range.startsWith("y:") ? S.range.slice(2) : {all: "all time", "12m": "last 12 months", "3y": "last 3 years"}[S.range];
+  const tile = (k, v, n) => h("div", {class: "tile"}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
+  const ld = C.last.date;
+  const delta = C.prev > 0 ? `${C.cur >= C.prev ? "Up" : "Down"} ${Math.abs(Math.round((C.cur / C.prev - 1) * 100))}% on ${C.ly - 1} through ${MON[ld.m-1]} ${ld.d} (${usd.format(C.prev)})` : `Through ${MON[ld.m-1]} ${ld.d}`;
+  $("#tiles").replaceChildren(
+    tile("Contributed, " + rangeName, usd.format(C.totIn), `${C.counted.filter(x => x.c === "in").length} deposits`),
+    tile(`${C.ly} so far`, usd.format(C.cur), delta),
+    tile("Average per month", usd.format(C.totIn / C.months.length), `Median ${usd.format(median(C.months.map(m => m.in)))}, over ${C.months.length} month${C.months.length === 1 ? "" : "s"}`),
+    tile("Withdrawn, " + rangeName, usd.format(C.totOut), `Net in: ${usd.format(C.totIn - C.totOut)}`)
+  );
+  $("#barTitle").textContent = "Contributions by " + S.gran;
+  const hasOut = C.totOut > 0;
+  $("#barLegend").replaceChildren(...(hasOut ? [h("span", null, h("i", {style: "background:var(--s1)"}), "Contributed"), h("span", null, h("i", {style: "background:var(--s2)"}), "Withdrawn")] : []));
+  if (C.totIn === 0 && C.totOut === 0) {
+    const msg = () => h("div", {class: "empty"}, "Nothing is counted as a contribution yet. Check the transaction types below and mark the right ones as money in.");
+    $("#bar").replaceChildren(msg()); $("#line").replaceChildren(msg());
+  } else { drawBars(C, hasOut); drawLine(C); }
+  drawLimits(); drawPace(C); drawCal(C); drawBuys(C); drawSecs(C); drawPivot(C); drawTypes(C); drawTx(C);
+  S.last = C;
+}
+
+function median(a){ const b = a.slice().sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : 0; }
+function niceStep(v){
+  const raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+function tipAt(tip, wrap, clientX, y, nodes){
+  tip.replaceChildren(...nodes); tip.style.display = "block";
+  const wr = wrap.getBoundingClientRect(); let x = clientX - wr.left + 12;
+  if (x + tip.offsetWidth > wr.width) x = clientX - wr.left - tip.offsetWidth - 12;
+  tip.style.transform = `translate(${Math.max(0, x)}px,${y}px)`;
+}
+const tipRow = (k, v) => h("span", null, h("em", {style: "font-style:normal"}, k), h("strong", {style: "color:var(--ink)"}, v));
+
+function drawBars(C, hasOut){
+  const el = $("#bar"), P = C.periods, n = P.length;
+  const W = Math.max(el.clientWidth, n * 4 + 56), H = 250, ml = 46, mr = 10, mt = 18, mb = 24;
+  const maxIn = Math.max(...P.map(p => p.in), 0), maxOut = Math.max(...P.map(p => p.out), 0);
+  const step = niceStep(Math.max(maxIn, maxOut) || 1);
+  const top = Math.max(step, Math.ceil(maxIn / step) * step), bot = -Math.ceil(maxOut / step) * step;
+  const band = (W - ml - mr) / n, bw = Math.max(2, Math.min(40, band - 2));
+  const y = v => mt + (top - v) / (top - bot) * (H - mt - mb);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart of contributions per ${S.gran}">`;
+  for (let v = bot; v <= top + 1e-9; v += step) {
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${Math.abs(v) < 1e-9 ? "axis" : "grid"})" stroke-width="1"/>`;
+    s += `<text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  s += `<rect id="barHl" x="0" y="${mt}" width="${band}" height="${H - mt - mb}" fill="var(--wash)" visibility="hidden"/>`;
+  const path = (x, y0, y1, w) => { const d = y1 < y0 ? 1 : -1, r = Math.min(4, w / 2, Math.abs(y1 - y0)); return `M${x},${y0}L${x},${y1 + d*r}Q${x},${y1} ${x + r},${y1}L${x + w - r},${y1}Q${x + w},${y1} ${x + w},${y1 + d*r}L${x + w},${y0}Z`; };
+  const div = S.gran === "month" ? 12 : S.gran === "quarter" ? 4 : 1;
+  const years = Math.ceil(n / div), yearEvery = Math.max(1, Math.ceil(years * 34 / (W - ml - mr)));
+  P.forEach((p, i) => {
+    const x = ml + i * band + (band - bw) / 2;
+    if (p.in > 0) s += `<path d="${path(x, y(0), y(p.in), bw)}" fill="var(--s1)"/>`;
+    if (p.out > 0) s += `<path d="${path(x, y(0), y(-p.out), bw)}" fill="var(--s2)"/>`;
+    if (n <= 12 && p.in > 0) s += `<text class="val" x="${x + bw/2}" y="${y(p.in) - 5}" text-anchor="middle">${compact(p.in)}</text>`;
+    const yr = Math.floor(p.k / div), first = p.k % div === 0;
+    let lab = null;
+    if (div === 1 && n <= 14) lab = MON[p.k % 12] + (first || i === 0 ? " ’" + String(yr).slice(2) : "");
+    else if (div === 4 && n <= 8) lab = "Q" + (p.k % 4 + 1) + (first || i === 0 ? " ’" + String(yr).slice(2) : "");
+    else if (first && yr % yearEvery === 0) lab = String(yr);
+    if (lab) s += `<text x="${div > 1 && n > 14 || (div === 4 && n > 8) ? ml + i * band + 2 : x + bw/2}" y="${H - 7}" text-anchor="${(div > 1 && n > 14) || (div === 4 && n > 8) ? "start" : "middle"}">${lab}</text>`;
+  });
+  s += "</svg>";
+  el.innerHTML = s; el.scrollLeft = el.scrollWidth;
+  const svg = el.firstChild, hl = svg.querySelector("#barHl"), tip = $("#barTip"), wrap = $("#barWrap");
+  const move = ev => {
+    const r = svg.getBoundingClientRect(), i = Math.floor((ev.clientX - r.left - ml) / band);
+    if (i < 0 || i >= n) return leave();
+    hl.setAttribute("x", ml + i * band); hl.setAttribute("visibility", "visible");
+    const p = P[i], rows = [h("b", null, p.label), tipRow("Contributed", usd.format(p.in))];
+    if (hasOut) rows.push(tipRow("Withdrawn", usd.format(p.out)), tipRow("Net", usd.format(p.in - p.out)));
+    tipAt(tip, wrap, ev.clientX, 4, rows);
+  };
+  const leave = () => { hl.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
+}
+
+function drawPace(C){
+  const el = $("#pace"), y1 = Math.floor(C.maxT / 12), y0 = Math.max(Math.floor(C.minT / 12), y1 - 5), series = [];
+  for (let yr = y1; yr >= y0; yr--) {
+    const pts = [0]; let run = 0;
+    for (let m = 0; m < 12; m++) { const t = yr * 12 + m; if (t > C.maxT) break; run += (C.allMonths.get(t) || {in: 0}).in; pts.push(run); }
+    series.push({yr, pts, end: run});
+  }
+  $("#paceTip").style.display = "none";
+  $("#paceNote").textContent = `Each line adds up one calendar year of contributions from January. Blue is ${y1}; grey lines are earlier years, fading with age.`;
+  const maxV = Math.max(...series.map(q => q.end));
+  if (!maxV) { el.replaceChildren(h("div", {class: "empty"}, "Nothing is counted as a contribution yet.")); return; }
+  const W = el.clientWidth, H = 240, ml = 46, mr = 40, mt = 14, mb = 24, step = niceStep(maxV), top = Math.ceil(maxV / step) * step;
+  const dx = (W - ml - mr) / 12, x = j => ml + j * dx, y = v => mt + (top - v) / top * (H - mt - mb);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart comparing cumulative contributions by calendar year">`;
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${v ? "grid" : "axis"})"/>`;
+    s += `<text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  for (let m = 0; m < 12; m++) s += `<text x="${x(m) + dx / 2}" y="${H - 7}" text-anchor="middle">${dx < 26 ? MON[m][0] : MON[m]}</text>`;
+  s += `<line id="pcX" y1="${mt}" y2="${H - mb}" stroke="var(--axis)" visibility="hidden"/>`;
+  series.slice().reverse().forEach(q => {
+    const age = y1 - q.yr, d = q.pts.map((v, j) => (j ? "L" : "M") + x(j).toFixed(1) + "," + y(v).toFixed(1)).join("");
+    s += `<path d="${d}" fill="none" stroke="var(--${age ? "muted" : "s1"})" stroke-width="${age ? 1.5 : 2.5}" opacity="${age ? Math.max(0.3, 1 - age * 0.17) : 1}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  const cur = series[0], cx = x(cur.pts.length - 1), cy = y(cur.end);
+  s += `<circle r="4.5" cx="${cx}" cy="${cy}" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`;
+  const full = series.filter(q => q.pts.length === 13).map(q => ({q, ly: y(q.end) + 4})).sort((a, b) => a.ly - b.ly);
+  for (let i = 1; i < full.length; i++) if (full[i].ly - full[i - 1].ly < 12) full[i].ly = full[i - 1].ly + 12;
+  const over = full.length ? full[full.length - 1].ly - (H - mb) : 0; if (over > 0) full.forEach(f => f.ly -= over);
+  full.forEach(f => s += `<text class="val" x="${W - mr + 6}" y="${f.ly}" ${f.q === cur ? 'style="font-weight:700;fill:var(--ink)"' : ""}>${f.q.yr}</text>`);
+  if (cur.pts.length < 13) s += `<text x="${cx + 8}" y="${cy - 8}" style="font-weight:700;fill:var(--ink);stroke:var(--surface);stroke-width:3px;paint-order:stroke">${cur.yr}</text>`;
+  s += "</svg>";
+  el.innerHTML = s;
+  const svg = el.firstChild, ln = svg.querySelector("#pcX"), tip = $("#paceTip"), wrap = $("#paceWrap");
+  const move = ev => {
+    const r = svg.getBoundingClientRect(), j = Math.max(1, Math.min(12, Math.round((ev.clientX - r.left - ml) / dx)));
+    ln.setAttribute("x1", x(j)); ln.setAttribute("x2", x(j)); ln.setAttribute("visibility", "visible");
+    tipAt(tip, wrap, ev.clientX, 4, [h("b", null, "Through end of " + MON[j - 1]), ...series.filter(q => q.pts.length > j).map(q => tipRow(String(q.yr), usd.format(q.pts[j])))]);
+  };
+  const leave = () => { ln.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
+}
+
+function drawCal(C){
+  // streaks over every month in the file for the selected account
+  let run = 0, longest = 0, g = 0, gap = 0, cnt = 0, n = 0;
+  for (let t = C.minT; t <= C.maxT; t++) {
+    n++;
+    if ((C.allMonths.get(t) || {in: 0}).in > 0) { cnt++; run++; g = 0; longest = Math.max(longest, run); }
+    else { run = 0; g++; gap = Math.max(gap, g); }
+  }
+  const mo = v => v + " month" + (v === 1 ? "" : "s");
+  const stat = (k, v, e) => h("div", null, h("span", null, k), h("strong", null, v), e ? h("em", null, e) : null);
+  $("#streaks").replaceChildren(stat("Months with a deposit", `${cnt} of ${n}`, Math.round(cnt / n * 100) + "%"), stat("Current streak", mo(run)), stat("Longest streak", mo(longest)), stat("Longest gap", mo(gap)));
+  const days = new Map(); let max = 0;
+  for (const {r, c} of C.counted) if (c === "in" && r.amount > 0) { const v = (days.get(r.ord) || 0) + r.amount; days.set(r.ord, v); max = Math.max(max, v); }
+  const mix = [35, 55, 78, 100], fill = v => `color-mix(in srgb,var(--s1) ${mix[Math.min(3, Math.ceil(v / max * 4) - 1)]}%,var(--surface))`;
+  $("#calScale").replaceChildren("Less", ...mix.map(m => h("i", {style: `background:color-mix(in srgb,var(--s1) ${m}%,var(--surface))`})), "More");
+  const el = $("#cal"), tip = $("#calTip"), wrap = $("#calWrap"); tip.style.display = "none";
+  const W = el.clientWidth, cell = Math.max(4, Math.floor(W / 53 * 10) / 10), top = 14, kids = [];
+  const yA = Math.floor(C.lo / 12), yB = Math.floor((C.lo + C.months.length - 1) / 12);
+  for (let yr = yB; yr >= yA; yr--) {
+    const first = new Date(Date.UTC(yr, 0, 1)).getUTCDay(), len = (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0 ? 366 : 365;
+    let s = `<svg width="${W}" height="${top + cell * 7}" viewBox="0 0 ${W} ${top + cell * 7}" role="img" aria-label="Calendar of deposit days in ${yr}">`, tot = 0, nd = 0;
+    const info = [];
+    for (let i = 0; i < len; i++) {
+      const d = new Date(Date.UTC(yr, 0, 1 + i)), m = d.getUTCMonth(), dd = d.getUTCDate(), v = days.get(yr * 10000 + (m + 1) * 100 + dd) || 0;
+      const wk = Math.floor((i + first) / 7), wd = d.getUTCDay();
+      if (v) { tot += v; nd++; }
+      if (dd === 1) s += `<text x="${wk * cell}" y="10">${cell < 8 ? MON[m][0] : MON[m]}</text>`;
+      s += `<rect x="${(wk * cell).toFixed(1)}" y="${(top + wd * cell).toFixed(1)}" width="${(cell - 1.5).toFixed(1)}" height="${(cell - 1.5).toFixed(1)}" rx="1.5" style="fill:${v ? fill(v) : "var(--wash)"}"/>`;
+      info.push([m, dd, v]);
+    }
+    const holder = h("div"); holder.innerHTML = s + "</svg>";
+    const svg = holder.firstChild;
+    const move = ev => {
+      const r = svg.getBoundingClientRect(), wk = Math.floor((ev.clientX - r.left) / cell), wd = Math.floor((ev.clientY - r.top - top) / cell), i = wk * 7 + wd - first;
+      if (wd < 0 || wd > 6 || i < 0 || i >= len) { tip.style.display = "none"; return; }
+      const [m, dd, v] = info[i];
+      tipAt(tip, wrap, ev.clientX, r.top - wrap.getBoundingClientRect().top - 34, [h("b", null, `${MON[m]} ${dd}, ${yr}`), h("span", null, v ? usd2.format(v) + " deposited" : "No deposit")]);
+    };
+    svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", () => tip.style.display = "none");
+    kids.push(h("div", {class: "yr"}, h("strong", null, yr), h("span", null, nd ? `${usd.format(tot)} on ${nd} day${nd === 1 ? "" : "s"}` : "No deposits")), svg);
+  }
+  el.replaceChildren(...kids);
+}
+
+function xLabels(P, W, H, ml, mr, band){
+  const n = P.length, div = S.gran === "month" ? 12 : S.gran === "quarter" ? 4 : 1; let s = "";
+  const years = Math.ceil(n / div), every = Math.max(1, Math.ceil(years * 34 / (W - ml - mr)));
+  const dense = div === 12 ? n > 14 : div === 4 ? n > 8 : false, skip = Math.max(1, Math.ceil(46 / band));
+  P.forEach((p, i) => {
+    const yr = Math.floor(p.k / div), first = p.k % div === 0; let lab = null;
+    if (div === 1) { if (yr % every === 0) lab = String(yr); }
+    else if (dense) { if (first && yr % every === 0) lab = String(yr); }
+    else if (i % skip === 0) lab = (div === 12 ? MON[p.k % 12] : "Q" + (p.k % 4 + 1)) + " \u2019" + String(yr).slice(2);
+    if (lab) s += `<text x="${dense ? ml + i * band + 2 : ml + i * band + band / 2}" y="${H - 7}" text-anchor="${dense ? "start" : "middle"}">${lab}</text>`;
+  });
+  return s;
+}
+
+function drawBuys(C){
+  const el = $("#buy"), P = C.periods, n = P.length, tot = KINDS.reduce((a, k) => a + C.buyTot[k[0]], 0);
+  $("#buyTitle").textContent = "Purchases by type, per " + S.gran;
+  const used = KINDS.filter(k => C.buyTot[k[0]] > 0);
+  $("#buyLegend").replaceChildren(...used.map(([id, name, col]) => h("div", null, h("i", {style: `background:var(${col})`}), h("span", null, name), h("strong", null, usd.format(C.buyTot[id])), h("em", null, Math.round(C.buyTot[id] / tot * 100) + "%"))));
+  $("#buyTip").style.display = "none";
+  if (!tot) { el.replaceChildren(h("div", {class: "empty"}, "No purchases with a ticker or fund name were found for this period.")); return; }
+  const W = Math.max(el.clientWidth, n * 4 + 56), H = 250, ml = 46, mr = 10, mt = 18, mb = 24;
+  const sum = p => used.reduce((a, k) => a + p.buy[k[0]], 0);
+  const step = niceStep(Math.max(...P.map(sum)) || 1), top = Math.max(step, Math.ceil(Math.max(...P.map(sum)) / step) * step);
+  const band = (W - ml - mr) / n, bw = Math.max(2, Math.min(40, band - 2)), y = v => mt + (top - v) / top * (H - mt - mb);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Stacked bar chart of purchases per ${S.gran} by holding type">`;
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${v ? "grid" : "axis"})"/>`;
+    s += `<text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  s += `<rect id="buyHl" x="0" y="${mt}" width="${band}" height="${H - mt - mb}" fill="var(--wash)" visibility="hidden"/>`;
+  P.forEach((p, i) => {
+    const x = ml + i * band + (band - bw) / 2; let acc = 0;
+    const segs = used.filter(k => p.buy[k[0]] > 0);
+    segs.forEach(([id, , col], j) => {
+      const y0 = y(acc), y1 = y(acc += p.buy[id]), last = j === segs.length - 1, hgt = y0 - y1, gap = !last && hgt > 4 ? 2 : 0;
+      if (last) { const r = Math.min(4, bw / 2, hgt); s += `<path d="M${x},${y0}L${x},${y1 + r}Q${x},${y1} ${x + r},${y1}L${x + bw - r},${y1}Q${x + bw},${y1} ${x + bw},${y1 + r}L${x + bw},${y0}Z" fill="var(${col})"/>`; }
+      else s += `<rect x="${x}" y="${y1 + gap}" width="${bw}" height="${Math.max(0.5, hgt - gap)}" fill="var(${col})"/>`;
+    });
+    if (n <= 12 && sum(p) > 0) s += `<text class="val" x="${x + bw / 2}" y="${y(sum(p)) - 5}" text-anchor="middle">${compact(sum(p))}</text>`;
+  });
+  s += xLabels(P, W, H, ml, mr, band) + "</svg>";
+  el.innerHTML = s; el.scrollLeft = el.scrollWidth;
+  const svg = el.firstChild, hl = svg.querySelector("#buyHl"), tip = $("#buyTip"), wrap = $("#buyWrap");
+  const leave = () => { hl.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  const move = ev => {
+    const r = svg.getBoundingClientRect(), i = Math.floor((ev.clientX - r.left - ml) / band);
+    if (i < 0 || i >= n) return leave();
+    hl.setAttribute("x", ml + i * band); hl.setAttribute("visibility", "visible");
+    const p = P[i];
+    tipAt(tip, wrap, ev.clientX, 4, [h("b", null, p.label), ...used.map(([id, name]) => tipRow(name, usd.format(p.buy[id]))), tipRow("Total", usd.format(sum(p)))]);
+  };
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
+}
+
+function drawSecs(C){
+  const g = new Map();
+  for (const r of C.rowsA) if (isBuy(r)) { let x = g.get(r.sec); if (!x) g.set(r.sec, x = {n: 0, sum: 0, r}); x.n++; x.sum += Math.abs(r.amount); }
+  const list = [...g.entries()].sort((a, b) => b[1].sum - a[1].sum);
+  if (!list.length) { $("#secs").replaceChildren(h("div", {class: "empty"}, "No holdings found.")); return; }
+  $("#secs").replaceChildren(...list.map(([key, x], i) => {
+    const sel = h("select", {id: "sec-" + i, "aria-label": "Type of " + key, onchange: e => {
+      S.secs[key] = e.target.value;
+      try { localStorage.setItem("fct-secs", JSON.stringify(S.secs)); } catch (err) {}
+      render();
+    }}, h("option", {value: "stock"}, "Individual stock"), h("option", {value: "etf"}, "ETF"), h("option", {value: "fund"}, "Mutual fund"), h("option", {value: "other"}, "Other"), h("option", {value: "skip"}, "Leave out"));
+    sel.value = kindOf(x.r);
+    const nm = x.r.sym ? x.r.secName.replace(/^YOU BOUGHT\s+/i, "").replace(/\s*\(.*$/, "") : "";
+    return h("div", {class: "type"},
+      h("div", null, h("div", {class: "nm"}, h("strong", null, key), nm ? " " + nm : ""), h("div", {class: "ct"}, `${x.n} purchase${x.n === 1 ? "" : "s"}, ${usd.format(x.sum)} all time`)),
+      sel);
+  }));
+}
+
+function drawLine(C){
+  const el = $("#line"), M = C.months, n = M.length;
+  let run = 0; const pts = M.map(m => (run += m.in - m.out));
+  $("#lineNote").textContent = S.range === "all" ? "" : "Starts from zero at " + MON[M[0].t % 12] + " " + Math.floor(M[0].t / 12);
+  const W = el.clientWidth, H = 220, ml = 46, mr = 14, mt = 22, mb = 24;
+  const hiV = Math.max(...pts, 0), loV = Math.min(...pts, 0), step = niceStep((hiV - loV) || 1);
+  const top = Math.max(step, Math.ceil(hiV / step) * step), bot = Math.floor(loV / step) * step;
+  const x = i => ml + (n === 1 ? (W - ml - mr) / 2 : i * (W - ml - mr) / (n - 1));
+  const y = v => mt + (top - v) / (top - bot) * (H - mt - mb);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart of the running total of net contributions">`;
+  for (let v = bot; v <= top + 1e-9; v += step) {
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${Math.abs(v) < 1e-9 ? "axis" : "grid"})"/>`;
+    s += `<text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  const years = Math.ceil(n / 12), every = Math.max(1, Math.ceil(years * 40 / (W - ml - mr)));
+  M.forEach((m, i) => {
+    const yr = Math.floor(m.t / 12), mo = m.t % 12;
+    if (n > 14 ? (mo === 0 && yr % every === 0) : (i % 3 === 0)) s += `<text x="${x(i)}" y="${H - 7}" text-anchor="${i === 0 ? "start" : "middle"}">${n > 14 ? yr : MON[mo] + " ’" + String(yr).slice(2)}</text>`;
+  });
+  const d = pts.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1)).join("");
+  s += `<path d="${d}L${x(n-1)},${y(0)}L${x(0)},${y(0)}Z" fill="var(--s1)" opacity=".12"/>`;
+  s += `<path d="${d}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  s += `<line id="lnX" y1="${mt}" y2="${H - mb}" stroke="var(--axis)" visibility="hidden"/>`;
+  s += `<circle id="lnDot" r="4.5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2" cx="${x(n-1)}" cy="${y(pts[n-1])}"/>`;
+  s += `<text class="val" x="${W - mr}" y="${Math.max(12, y(pts[n-1]) - 10)}" text-anchor="end" style="font-weight:600">${usd.format(pts[n-1])}</text>`;
+  s += "</svg>";
+  el.innerHTML = s;
+  const svg = el.firstChild, ln = svg.querySelector("#lnX"), dot = svg.querySelector("#lnDot"), tip = $("#lineTip"), wrap = $("#lineWrap");
+  const move = ev => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.round((ev.clientX - r.left - ml) / ((W - ml - mr) / Math.max(1, n - 1)))));
+    ln.setAttribute("x1", x(i)); ln.setAttribute("x2", x(i)); ln.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(pts[i]));
+    tipAt(tip, wrap, ev.clientX, 4, [h("b", null, MON[M[i].t % 12] + " " + Math.floor(M[i].t / 12)), tipRow("Running total", usd.format(pts[i])), tipRow("This month", usd.format(M[i].in - M[i].out))]);
+  };
+  const leave = () => { ln.setAttribute("visibility", "hidden"); dot.setAttribute("cx", x(n-1)); dot.setAttribute("cy", y(pts[n-1])); tip.style.display = "none"; };
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
+}
+
+function drawPivot(C){
+  const y0 = Math.floor(C.minT / 12), y1 = Math.floor(C.maxT / 12);
+  let max = 0; for (const m of C.allMonths.values()) max = Math.max(max, m.in);
+  const body = [];
+  for (let yr = y1; yr >= y0; yr--) {
+    let tot = 0; const tds = [];
+    for (let mo = 0; mo < 12; mo++) {
+      const t = yr * 12 + mo, v = (C.allMonths.get(t) || {in: 0}).in; tot += v;
+      const outside = t < C.minT || t > C.maxT;
+      tds.push(h("td", {class: v ? null : "z", style: v > 0 && max ? `background:color-mix(in srgb,var(--s1) ${Math.round(6 + 34 * v / max)}%,transparent)` : null}, outside ? "" : v ? usd.format(v) : "–"));
+    }
+    body.push(h("tr", null, h("td", null, yr), tds, h("td", {class: "tot"}, usd.format(tot))));
+  }
+  $("#pivot").replaceChildren(h("table", {class: "pivot"},
+    h("thead", null, h("tr", null, h("th", null, "Year"), MON.map(m => h("th", null, m)), h("th", null, "Total"))),
+    h("tbody", null, body)));
+}
+
+function drawTypes(C){
+  const g = new Map();
+  for (const r of C.rowsA) { let x = g.get(r.group); if (!x) g.set(r.group, x = {n: 0, sum: 0}); x.n++; x.sum += r.amount; }
+  const order = {in: 0, out: 1, skip: 2};
+  const list = [...g.entries()].sort((a, b) => order[catOf(a[0])] - order[catOf(b[0])] || b[1].n - a[1].n);
+  $("#types").replaceChildren(...list.map(([name, x], i) => {
+    const sel = h("select", {id: "type-" + i, "aria-label": "How to count " + name, onchange: e => {
+      S.overrides[name] = e.target.value;
+      try { localStorage.setItem("fct-cats", JSON.stringify(S.overrides)); } catch (err) {}
+      render();
+    }}, h("option", {value: "in"}, "Money in"), h("option", {value: "out"}, "Money out"), h("option", {value: "skip"}, "Leave out"));
+    sel.value = catOf(name);
+    return h("div", {class: "type"},
+      h("div", null, h("div", {class: "nm"}, name.charAt(0) + name.slice(1).toLowerCase()), h("div", {class: "ct"}, `${x.n} row${x.n === 1 ? "" : "s"}, ${usd.format(x.sum)} total`)),
+      sel);
+  }));
+}
+
+function drawTx(C){
+  const all = C.counted.slice().reverse(), show = S.showAll ? all : all.slice(0, 10);
+  const kids = [h("table", {class: "tx"},
+    h("thead", null, h("tr", null, h("th", null, "Date"), h("th", {style: "text-align:left"}, "Account"), h("th", {style: "text-align:left"}, "Type"), h("th", null, "Amount"))),
+    h("tbody", null, show.map(({r, c}) => h("tr", null,
+      h("td", null, `${MON[r.date.m-1]} ${r.date.d}, ${r.date.y}`), h("td", null, r.account),
+      h("td", null, r.group.charAt(0) + r.group.slice(1).toLowerCase()),
+      h("td", null, (c === "out" ? "−" : "") + usd2.format(Math.abs(r.amount)))))))];
+  if (!all.length) kids.length = 0, kids.push(h("div", {class: "empty"}, "No counted transactions in this period."));
+  else if (all.length > show.length) kids.push(h("div", {style: "padding-top:10px"}, h("button", {type: "button", onclick: () => { S.showAll = true; drawTx(S.last); }}, `Show all ${all.length.toLocaleString()}`)));
+  $("#tx").replaceChildren(...kids);
+}
+
+/* ---------- events ---------- */
+async function takeFiles(list){
+  const files = [...list]; if (!files.length) return;
+  const read = await Promise.all(files.map(async f => ({name: f.name, text: await f.text()})));
+  load(read, false);
+}
+$("#file").addEventListener("change", e => { takeFiles(e.target.files); e.target.value = ""; });
+$("#sample").addEventListener("click", () => load([{name: "sample.csv", text: sampleCSV()}], true));
+$("#account").addEventListener("change", e => { S.account = e.target.value; S.showAll = false; buildRanges(); render(); });
+$("#limYear").addEventListener("change", e => { S.limYear = +e.target.value; drawLimits(); });
+$("#range").addEventListener("change", e => { S.range = e.target.value; S.showAll = false; render(); });
+$("#gran").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  S.gran = b.dataset.g; for (const x of $("#gran").children) x.setAttribute("aria-pressed", String(x === b)); render();
+});
+$("#copy").addEventListener("click", async e => {
+  const C = S.last; if (!C) return; const lines = ["Month,Contributed,Withdrawn"];
+  for (let t = C.minT; t <= C.maxT; t++) { const m = C.allMonths.get(t) || {in: 0, out: 0}; lines.push(`${Math.floor(t/12)}-${String(t % 12 + 1).padStart(2,"0")},${m.in.toFixed(2)},${m.out.toFixed(2)}`); }
+  const b = e.currentTarget;
+  try { await navigator.clipboard.writeText(lines.join("\n")); b.textContent = "Copied"; } catch (err) { b.textContent = "Copy was blocked"; }
+  setTimeout(() => b.textContent = "Copy monthly totals", 1800);
+});
+const ld = $("#loader");
+document.addEventListener("dragover", e => { e.preventDefault(); ld.classList.add("drop"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) ld.classList.remove("drop"); });
+document.addEventListener("drop", e => { e.preventDefault(); ld.classList.remove("drop"); if (e.dataTransfer) takeFiles(e.dataTransfer.files); });
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => S.rows.length && render(), 150); });
+
+load([{name: "sample.csv", text: sampleCSV()}], true);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# Never commit real account exports
+*.csv
+*.CSV
+.DS_Store
