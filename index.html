@@ -141,6 +141,11 @@ th:first-child,td:first-child{text-align:left}
 .type .ct{font-size:12px;color:var(--ink-2)}
 .type select{min-height:34px;padding:4px 8px;max-width:min(15rem,52vw)}
 summary{cursor:pointer;font-weight:650;font-size:15px}
+.type .raw{grid-column:1/-1;min-width:0}
+.raw summary{font-size:12px;font-weight:600;color:var(--ink-2);padding:2px 0}
+.raw>div{margin-top:6px;display:flex;flex-direction:column;gap:6px}
+.rawt th,.rawt td{text-align:left;font-size:12px;padding:4px 8px}
+.rawt td.e{color:var(--muted)}
 details>div{margin-top:10px}
 .empty{padding:28px 8px;text-align:center;color:var(--ink-2);font-size:14px}
 @media (prefers-reduced-motion:no-preference){button,.filebtn{transition:background .12s}}
@@ -413,6 +418,8 @@ function ingestFile(name, text){
   }
   if (hi < 0) return {error: "No header row with a Date column and an Amount column in " + name + ". Use the CSV from Activity & Orders, then Download."};
   const base = name.replace(/\.[^.]+$/, "");
+  // Shared by every row from this file, so the raw row can be shown under its own column names.
+  const header = {cells: rows[hi].map(c => c.trim()), num: cols.num};
   const out = []; let skipped = 0;
   for (let i = hi + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -427,7 +434,7 @@ function ingestFile(name, text){
     const desc = cols.desc >= 0 && cols.desc !== cols.act ? (r[cols.desc] || "").trim() : "";
     const sym = cols.sym >= 0 ? (r[cols.sym] || "").trim().toUpperCase() : "";
     out.push({sym, sec: sym || (cols.inv ? desc : ""), secName: desc && !/^no description$/i.test(desc) ? desc : action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d, account, action,
-      group: groupOf(action), amount, desc});
+      group: groupOf(action), amount, desc, raw: r, header});
   }
   return {rows: out, skipped};
 }
@@ -976,9 +983,26 @@ function drawPivot(C){
     h("tbody", null, body)));
 }
 
+// The rows behind a transaction type, exactly as they appear in the file (latest first, account numbers shortened).
+function rawRows(rows){
+  const list = rows.slice().reverse(), show = list.slice(0, 25), byFile = new Map();
+  for (const r of show) { let a = byFile.get(r.header); if (!a) byFile.set(r.header, a = []); a.push(r); }
+  const kids = [...byFile].map(([hd, rs]) => {
+    let n = hd.cells.length; for (const r of rs) n = Math.max(n, r.raw.length);
+    while (n > 0 && !hd.cells[n - 1] && rs.every(r => !(r.raw[n - 1] || "").trim())) n--;
+    const cell = (r, i) => { const v = (r.raw[i] || "").trim(); return i === hd.num && v.length > 4 ? "\u00b7\u00b7" + v.slice(-4) : v; };
+    return h("div", {class: "scroll"}, h("table", {class: "rawt"},
+      h("thead", null, h("tr", null, Array.from({length: n}, (_, i) => h("th", null, hd.cells[i] || "")))),
+      h("tbody", null, rs.map(r => h("tr", null, Array.from({length: n}, (_, i) => { const v = cell(r, i); return h("td", {class: v ? null : "e"}, v || "\u2013"); }))))));
+  });
+  if (list.length > show.length) kids.push(h("p", {class: "sub"}, `Showing the latest ${show.length} of ${list.length.toLocaleString()}.`));
+  return kids;
+}
+
 function drawTypes(C){
   const g = new Map(), U = unrecognised(), CATN = {in: "money in", out: "money out", skip: "left out"};
-  for (const r of C.rowsA) { let x = g.get(r.group); if (!x) g.set(r.group, x = {n: 0, sum: 0}); x.n++; x.sum += r.amount; }
+  if (!S.rawOpen) S.rawOpen = {};
+  for (const r of C.rowsA) { let x = g.get(r.group); if (!x) g.set(r.group, x = {n: 0, sum: 0, rows: []}); x.n++; x.sum += r.amount; x.rows.push(r); }
   const order = {in: 1, out: 2, skip: 3}, rank = k => U.has(k) ? 0 : order[catOf(k)];
   const list = [...g.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || b[1].n - a[1].n);
   $("#types").replaceChildren(...list.map(([name, x], i) => {
@@ -993,7 +1017,10 @@ function drawTypes(C){
     sel.value = unk ? "" : catOf(name);
     return h("div", {class: "type"},
       h("div", null, h("div", {class: "nm"}, unk ? h("span", {class: "tag"}, "Not recognised") : null, name.charAt(0) + name.slice(1).toLowerCase()), h("div", {class: "ct"}, `${x.n} row${x.n === 1 ? "" : "s"}, ${usd.format(x.sum)} total`)),
-      sel);
+      sel,
+      h("details", {class: "raw", open: (name in S.rawOpen ? S.rawOpen[name] : unk) ? "" : null, ontoggle: e => { S.rawOpen[name] = e.target.open; }},
+        h("summary", null, x.n === 1 ? "Show the row from your file" : `Show the ${x.n.toLocaleString()} rows from your file`),
+        h("div", null, rawRows(x.rows))));
   }));
 }
 
