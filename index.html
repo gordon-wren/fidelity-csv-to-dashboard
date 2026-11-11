@@ -554,18 +554,18 @@ function buildRanges(){
 function drawAcctBar(){
   const q = $("#acctFind").value.trim().toLowerCase().replace(/\s+/g, " ");
   const qn = q.replace(/^[·.]+/, ""), at = a => qn ? a.num.toLowerCase().indexOf(qn) : -1;
-  const hit = a => !q || a.id === S.account || a.name.toLowerCase().includes(q) || at(a) >= 0;
+  const match = a => a.name.toLowerCase().includes(q) || at(a) >= 0, hit = a => !q || a.id === S.account || match(a);
   // Show more digits from where the search matched.
   const short = a => {
     let n = a.n4; const i = at(a); if (i >= 0) n = Math.max(n, a.num.length - i);
     return n >= a.num.length ? a.num : "··" + a.num.slice(-n);
   };
-  const chip = (id, name, no) => h("button", {type: "button", "aria-pressed": String(S.account === id), onclick: () => setAccount(id)},
+  const chip = (id, name, no, m) => h("button", {type: "button", "aria-pressed": String(S.account === id), "data-match": m ? "" : null, onclick: () => setAccount(id)},
     h("span", null, name), no ? h("span", {class: "no"}, no) : null);
   const list = S.accts.filter(hit);
   const kids = [chip("all", "All accounts", `${S.accts.length} account${S.accts.length === 1 ? "" : "s"}`),
-    ...list.map(a => chip(a.id, a.name || "Account", a.num ? short(a) : ""))];
-  if (q && !list.length) kids.push(h("span", {class: "none"}, "No account matches."));
+    ...list.map(a => chip(a.id, a.name || "Account", a.num ? short(a) : "", q && match(a)))];
+  if (q && !list.some(match)) kids.push(h("span", {class: "none"}, "No account matches."));
   $("#accts").replaceChildren(...kids);
 }
 function setAccount(id){
@@ -1155,7 +1155,7 @@ $("#sample").addEventListener("click", () => load([{name: "sample.csv", text: sa
 $("#acctFind").addEventListener("input", drawAcctBar);
 $("#acctFind").addEventListener("keydown", e => {
   if (e.key !== "Enter") return; e.preventDefault();
-  const b = [...$("#accts").querySelectorAll("button")]; if (b.length > 1) b[1].click();
+  const b = $("#accts button[data-match]"); if (b) b.click();
 });
 $("#limYear").addEventListener("change", e => { S.limYear = +e.target.value; drawLimits(); });
 $("#range").addEventListener("change", e => { S.range = e.target.value; S.showAll = false; render(); });
