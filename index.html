@@ -5,12 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fidelity Contribution Tracker</title>
 <style>
-/* Layout idea: one column of cards, summary first, charts next, detail tables last. Everything reads at 380px. */
+/* Two dashboards. Overview: status, headline, trends, tables. Data and settings: data health, classification, raw rows.
+   12-column grid from 860px; one column below, in the same top-to-bottom order. Everything reads at 390px. */
 :root{
   color-scheme:light;
   --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --wash:rgba(11,11,11,.05);
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --good:#006300;
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#6250d6; --s4:#e87ba4; --sx:#8c8a84;
+  /* status: reserved for breaches and anomalies, always with an icon and words */
+  --warn:#fab219; --crit:#d03b3b;
   --font:system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme:dark){
@@ -18,19 +21,24 @@
     color-scheme:dark;
     --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.06);
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --good:#0ca30c;
+    --s1:#3987e5; --s2:#199e70; --s3:#9085e9; --s4:#d55181; --sx:#7a7873;
+    --warn:#fab219; --crit:#d03b3b;
   }
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
   --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.06);
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --good:#0ca30c;
+  --s1:#3987e5; --s2:#199e70; --s3:#9085e9; --s4:#d55181; --sx:#7a7873;
+    --warn:#fab219; --crit:#d03b3b;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--page);color:var(--ink);font:15px/1.45 var(--font);-webkit-text-size-adjust:100%}
-main{max-width:980px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+main{max-width:1240px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+[hidden]{display:none!important}
+a{color:var(--ink);text-decoration-color:var(--axis);text-underline-offset:2px}
+a:hover{text-decoration-color:var(--ink)}
 h1{font-size:22px;line-height:1.2;margin:0;text-wrap:balance;letter-spacing:-.01em}
 h2{font-size:15px;margin:0;font-weight:650}
 p{margin:0}
@@ -49,8 +57,8 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border:1px dashed var(--axis);border-radius:999px;padding:3px 10px;color:var(--ink-2)}
 .chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
 .chip.live{border-style:solid}
-.chip.live::before{background:var(--good)}
-.err{color:var(--ink);border-left:3px solid var(--s2);padding:6px 10px;background:var(--wash);border-radius:4px;font-size:13px}
+.chip.live::before{background:var(--s1)}
+.err{color:var(--ink);border-left:3px solid var(--crit);padding:6px 10px;background:var(--wash);border-radius:4px;font-size:13px}
 .drop{outline:2px dashed var(--s1);outline-offset:-6px}
 .seg{display:inline-flex;border:1px solid var(--axis);border-radius:8px;overflow:hidden}
 .seg button{border:0;border-radius:0;min-height:36px;padding:6px 12px;background:transparent;color:var(--ink-2)}
@@ -62,6 +70,33 @@ label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--in
 .tile .k{font-size:12px;color:var(--ink-2)}
 .tile .v{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}
 .tile .n{font-size:12px;color:var(--ink-2)}
+.tile.sm{padding:10px 14px}
+.tile.sm .v{font-size:19px}
+.tile.hero{padding:18px}
+.tile.hero .v{font-size:36px}
+.tile.flag{border-left:3px solid var(--warn)}
+.top{display:flex;flex-direction:column;gap:14px}
+.controls{align-items:flex-end}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border)}
+.tabs a{padding:8px 12px;color:var(--ink-2);text-decoration:none;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--ink)}
+.tabs a[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.grid{display:flex;flex-direction:column;gap:16px}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;min-width:0}
+.kpis .hero{grid-column:span 2}
+@media (min-width:860px){
+  .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}
+  .w12{grid-column:span 12}.w8{grid-column:span 8}.w7{grid-column:span 7}.w6{grid-column:span 6}.w5{grid-column:span 5}.w4{grid-column:span 4}
+}
+.health{display:flex;flex-wrap:wrap;gap:8px}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-height:34px;text-decoration:none}
+a.badge:hover{background:var(--wash)}
+.badge .ic{font-weight:700;color:var(--ink-2)}
+.badge.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--surface))}
+.badge.crit{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,var(--surface));font-weight:600}
+.badge.warn .ic,.badge.crit .ic{color:var(--ink)}
+.tag{display:inline-block;font-size:11px;font-weight:650;color:var(--ink);border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--surface));border-radius:999px;padding:0 7px;margin-right:6px;vertical-align:1px}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .chart{position:relative}
@@ -77,7 +112,7 @@ svg text.val{fill:var(--ink-2)}
 .lim .pct{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
 .meter{height:10px;border-radius:5px;background:var(--wash);overflow:hidden}
 .meter div{height:100%;background:var(--s1);border-radius:5px;min-width:2px}
-.meter.over div{background:#d03b3b}
+.meter.over div{background:var(--crit)}
 .lim .ln{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
 .lim input{font:inherit;width:96px;padding:4px 8px;min-height:32px;border:1px solid var(--axis);border-radius:8px;background:var(--surface);color:var(--ink)}
 .lim .st{font-size:13px;color:var(--ink-2)}
@@ -104,7 +139,7 @@ th:first-child,td:first-child{text-align:left}
 .type{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:9px 0;border-bottom:1px solid var(--grid);align-items:center}
 .type .nm{font-size:13px;overflow-wrap:anywhere}
 .type .ct{font-size:12px;color:var(--ink-2)}
-.type select{min-height:34px;padding:4px 8px}
+.type select{min-height:34px;padding:4px 8px;max-width:min(15rem,52vw)}
 summary{cursor:pointer;font-weight:650;font-size:15px}
 details>div{margin-top:10px}
 .empty{padding:28px 8px;text-align:center;color:var(--ink-2);font-size:14px}
@@ -113,125 +148,153 @@ details>div{margin-top:10px}
 </head>
 <body>
 <main>
-  <header class="row spread">
-    <div>
-      <h1>Fidelity Contribution Tracker</h1>
-      <p class="sub">Money you put in, by month, quarter and year, from your activity export.</p>
+  <header class="top">
+    <div class="row spread">
+      <div>
+        <h1>Fidelity Contribution Tracker</h1>
+        <p class="sub">Money you put in, by month, quarter and year, from your activity export.</p>
+      </div>
+      <div class="row">
+        <span class="chip" id="state">Sample data</span>
+        <label class="filebtn primary" for="file">Choose CSV files<input id="file" type="file" accept=".csv,text/csv" multiple></label>
+      </div>
+    </div>
+    <div class="row spread controls">
+      <nav class="tabs" role="tablist" aria-label="Dashboards">
+        <a role="tab" href="#overview" id="tab-overview" aria-controls="v-overview" aria-selected="true">Overview</a>
+        <a role="tab" href="#data" id="tab-data" aria-controls="v-data" aria-selected="false">Data and settings</a>
+      </nav>
+      <section class="row" aria-label="Filters">
+        <label class="f" for="account">Account<select id="account"></select></label>
+        <label class="f" for="range">Period<select id="range"></select></label>
+        <div class="f" id="granBox"><span>Group by</span>
+          <div class="seg" id="gran" role="group" aria-label="Group by">
+            <button type="button" data-g="month" aria-pressed="true">Month</button>
+            <button type="button" data-g="quarter" aria-pressed="false">Quarter</button>
+            <button type="button" data-g="year" aria-pressed="false">Year</button>
+          </div>
+        </div>
+      </section>
     </div>
   </header>
 
-  <section class="card" id="loader">
-    <div class="row">
-      <label class="filebtn primary" for="file">Choose CSV files<input id="file" type="file" accept=".csv,text/csv" multiple></label>
-      <button id="sample" type="button">Use sample data</button>
-      <span class="chip" id="state">Sample data</span>
-    </div>
-    <p class="sub" id="status">These numbers are made up. Load your own export to replace them.</p>
-    <div id="errors"></div>
-    <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
-  </section>
+  <section class="health" id="health" aria-label="Status"></section>
 
-  <section class="row" aria-label="Filters">
-    <label class="f" for="account">Account<select id="account"></select></label>
-    <label class="f" for="range">Period<select id="range"></select></label>
-    <div class="f"><span>Group by</span>
-      <div class="seg" id="gran" role="group" aria-label="Group by">
-        <button type="button" data-g="month" aria-pressed="true">Month</button>
-        <button type="button" data-g="quarter" aria-pressed="false">Quarter</button>
-        <button type="button" data-g="year" aria-pressed="false">Year</button>
+  <!-- Overview: am I on track? Headline first, trends next, tables last. -->
+  <div class="view grid" id="v-overview" role="tabpanel" aria-labelledby="tab-overview">
+    <section class="card w8" id="limCard">
+      <div class="row spread">
+        <h2>Annual limits</h2>
+        <label class="f" for="limYear">Tax year<select id="limYear"></select></label>
       </div>
-    </div>
-  </section>
+      <p class="sub">All accounts, whatever the account filter says. Rollovers are not counted, and IRA deposits marked prior year count toward the year before. Limits are the under-50 amounts; type over one if catch-up applies to you.</p>
+      <div id="limits"></div>
+      <p class="sub">Account types are guessed from account names. <a href="#acctCard">Change them under Data and settings</a>.</p>
+    </section>
 
-  <section class="tiles" id="tiles"></section>
+    <section class="w4 kpis" id="tiles" aria-label="Key numbers"></section>
 
-  <section class="card">
-    <div class="row spread">
-      <h2>Annual limit tracker</h2>
-      <label class="f" for="limYear">Tax year<select id="limYear"></select></label>
-    </div>
-    <p class="sub">All accounts, whatever the account filter says. Rollovers are not counted, and IRA deposits marked prior year count toward the year before. Limits are the under-50 amounts; type over one if catch-up applies to you.</p>
-    <div id="limits"></div>
-    <details>
-      <summary>Account types</summary>
+    <section class="card w12">
+      <div class="row spread">
+        <h2 id="barTitle">Contributions by month</h2>
+        <div class="legend" id="barLegend"></div>
+      </div>
+      <div class="chart" id="barWrap"><div class="scroll" id="bar"></div><div class="tip" id="barTip"></div></div>
+    </section>
+
+    <section class="card w6">
+      <div class="row spread">
+        <h2>Running total, net of withdrawals</h2>
+        <span class="sub" id="lineNote"></span>
+      </div>
+      <div class="chart" id="lineWrap"><div id="line"></div><div class="tip" id="lineTip"></div></div>
+    </section>
+
+    <section class="card w6">
       <div>
-        <p class="sub">Guessed from each account name. Accounts of the same type share one limit.</p>
+        <h2>Year-over-year pace</h2>
+        <p class="sub" id="paceNote"></p>
+      </div>
+      <div class="chart" id="paceWrap"><div id="pace"></div><div class="tip" id="paceTip"></div></div>
+    </section>
+
+    <section class="card w6">
+      <div class="row spread">
+        <h2>Consistency</h2>
+        <div class="scale" id="calScale"></div>
+      </div>
+      <div class="klist" id="streaks"></div>
+      <div class="chart" id="calWrap"><div id="cal"></div><div class="tip" id="calTip"></div></div>
+    </section>
+
+    <section class="card w6">
+      <div>
+        <h2 id="buyTitle">Purchases by type</h2>
+        <p class="sub">What you bought, split by kind of holding. Buys only: sales and reinvested dividends are not included. <a href="#secCard">Fix a holding's type</a>.</p>
+      </div>
+      <div class="klist" id="buyLegend"></div>
+      <div class="chart" id="buyWrap"><div class="scroll" id="buy"></div><div class="tip" id="buyTip"></div></div>
+    </section>
+
+    <section class="card w12">
+      <div class="row spread">
+        <h2>Contributions by year and month</h2>
+        <button id="copy" type="button">Copy monthly totals</button>
+      </div>
+      <div class="scroll" id="pivot"></div>
+    </section>
+  </div>
+
+  <!-- Data and settings: is the number right? Health first, settings next, raw rows last. -->
+  <div class="view grid" id="v-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+    <section class="card w12" id="loader">
+      <div class="row spread">
+        <h2>Data source</h2>
+        <button id="sample" type="button">Use sample data</button>
+      </div>
+      <p class="sub" id="status">These numbers are made up. Load your own export to replace them.</p>
+      <div id="errors"></div>
+      <div class="tiles" id="dataTiles"></div>
+      <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
+    </section>
+
+    <section class="card w7" id="typesCard">
+      <div>
+        <h2>Transaction types</h2>
+        <p class="sub">Each type in your file is counted as money in, money out, or left out. Types the page does not recognise are listed first. Your choices are remembered in this browser.</p>
+      </div>
+      <div class="types" id="types"></div>
+    </section>
+
+    <div class="w5 stack">
+      <section class="card" id="acctCard">
+        <div>
+          <h2>Accounts</h2>
+          <p class="sub">Types are guessed from each account name. Accounts of the same type share one limit.</p>
+        </div>
         <div class="types" id="acctTypes"></div>
-      </div>
-    </details>
-  </section>
-
-  <section class="card">
-    <div class="row spread">
-      <h2 id="barTitle">Contributions by month</h2>
-      <div class="legend" id="barLegend"></div>
-    </div>
-    <div class="chart" id="barWrap"><div class="scroll" id="bar"></div><div class="tip" id="barTip"></div></div>
-  </section>
-
-  <section class="card">
-    <div class="row spread">
-      <h2>Running total, net of withdrawals</h2>
-      <span class="sub" id="lineNote"></span>
-    </div>
-    <div class="chart" id="lineWrap"><div id="line"></div><div class="tip" id="lineTip"></div></div>
-  </section>
-
-  <section class="card">
-    <div>
-      <h2>Year-over-year pace</h2>
-      <p class="sub" id="paceNote"></p>
-    </div>
-    <div class="chart" id="paceWrap"><div id="pace"></div><div class="tip" id="paceTip"></div></div>
-  </section>
-
-  <section class="card">
-    <div class="row spread">
-      <h2>Consistency</h2>
-      <div class="scale" id="calScale"></div>
-    </div>
-    <div class="klist" id="streaks"></div>
-    <div class="chart" id="calWrap"><div id="cal"></div><div class="tip" id="calTip"></div></div>
-  </section>
-
-  <section class="card">
-    <div>
-      <h2 id="buyTitle">Purchases by type</h2>
-      <p class="sub">What you bought, split by kind of holding. Buys only: sales and reinvested dividends are not included.</p>
-    </div>
-    <div class="klist" id="buyLegend"></div>
-    <div class="chart" id="buyWrap"><div class="scroll" id="buy"></div><div class="tip" id="buyTip"></div></div>
-    <details>
-      <summary>How each holding is categorised</summary>
-      <div>
-        <p class="sub">Types are guessed from the ticker and name. Fix any that are wrong; your choices are remembered in this browser.</p>
+      </section>
+      <section class="card" id="secCard">
+        <div>
+          <h2>Holdings</h2>
+          <p class="sub">Types are guessed from the ticker and name. Fix any that are wrong; your choices are remembered in this browser.</p>
+        </div>
         <div class="types" id="secs"></div>
-      </div>
-    </details>
-  </section>
-
-  <section class="card">
-    <div class="row spread">
-      <h2>Contributions by year and month</h2>
-      <button id="copy" type="button">Copy monthly totals</button>
+      </section>
     </div>
-    <div class="scroll" id="pivot"></div>
-  </section>
 
-  <section class="card">
-    <details open>
-      <summary>How each transaction type is counted</summary>
-      <div>
-        <p class="sub">Each type in your file is counted as money in, money out, or left out. Change any that look wrong; your choices are remembered in this browser.</p>
-        <div class="types" id="types"></div>
+    <section class="card w12">
+      <div class="row spread">
+        <h2>Transactions</h2>
+        <div class="seg" id="txMode" role="group" aria-label="Which transactions to list">
+          <button type="button" data-m="in" aria-pressed="true">Counted</button>
+          <button type="button" data-m="skip" aria-pressed="false">Left out</button>
+        </div>
       </div>
-    </details>
-  </section>
-
-  <section class="card">
-    <h2>Counted transactions</h2>
-    <div class="scroll" id="tx"></div>
-  </section>
+      <p class="sub" id="txNote"></p>
+      <div class="scroll" id="tx"></div>
+    </section>
+  </div>
 </main>
 
 <script>
@@ -407,21 +470,29 @@ function sampleCSV(){
 }
 
 /* ---------- state ---------- */
-const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false};
+const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false, view: "overview", txMode: "in", src: {files: 0, errors: [], skipped: 0, isSample: true}};
 try { S.overrides = JSON.parse(localStorage.getItem("fct-cats") || "{}") || {}; } catch (e) {}
 const catOf = g => S.overrides[g] || defaultCat(g);
 S.secs = {}; try { S.secs = JSON.parse(localStorage.getItem("fct-secs") || "{}") || {}; } catch (e) {}
 const kindOf = r => S.secs[r.sec] || guessKind(r.sym, r.secName);
 const isBuy = r => !!r.sec && (BUYS.has(r.group) || catOf(r.group) === "in");
+// Types with no known prefix that the viewer has not yet chosen for. They fall back to defaultCat, usually "leave out".
+function unrecognised(){
+  const g = new Map();
+  for (const r of S.rows) if (!(r.group in DEFAULTS) && !(r.group in S.overrides)) { let x = g.get(r.group); if (!x) g.set(r.group, x = {n: 0, sum: 0}); x.n++; x.sum += r.amount; }
+  return g;
+}
 
 function load(files, isSample){
   const res = ingest(files);
   const errBox = $("#errors"); errBox.replaceChildren(...res.errors.map(e => h("p", {class: "err"}, e)));
   if (!res.rows.length) {
     if (!res.errors.length) errBox.append(h("p", {class: "err"}, "No dated rows with an amount were found in that file."));
+    if (location.hash !== "#loader") location.hash = "#loader"; else route();
     return;
   }
   S.rows = res.rows.sort((a, b) => a.ord - b.ord); S.account = "all"; S.range = "all"; S.showAll = false;
+  S.src = {files: files.length - res.errors.length, errors: res.errors, skipped: res.skipped, isSample: !!isSample};
   const st = $("#state"); st.textContent = isSample ? "Sample data" : "Your data"; st.className = "chip" + (isSample ? "" : " live");
   const a = S.rows[0].date, b = S.rows[S.rows.length-1].date;
   $("#status").textContent = isSample ? "These numbers are made up. Load your own export to replace them."
@@ -465,23 +536,27 @@ function acctKind(a){
   return "none";
 }
 const taxYear = r => r.date.y - (/PRIOR YEAR/i.test(r.action) ? 1 : 0);
+const LSHORT = {ira: "IRA", k401: "401(k)", hsa1: "HSA", hsa2: "HSA"};
+const limitKinds = () => { const accts = new Set(S.rows.map(r => r.account)); return LKINDS.filter(([k]) => k !== "none" && [...accts].some(a => acctKind(a) === k)); };
+function limitFor(kind, Y){
+  let sum = 0;
+  for (const r of S.rows) if (acctKind(r.account) === kind && catOf(r.group) === "in" && r.group !== "ROLLOVER" && taxYear(r) === Y) sum += r.amount;
+  const key = kind + ":" + Y, limit = S.lim.custom[key] != null ? S.lim.custom[key] : (LIMITS[kind][Y] || null);
+  return {sum, limit, key, pct: limit ? sum / limit : 0, left: limit ? limit - sum : 0};
+}
 function drawLimits(){
   if (!S.rows.length) return;
   const last = S.rows[S.rows.length - 1].date, Y = S.limYear, accts = [...new Set(S.rows.map(r => r.account))].sort();
   const box = [];
-  for (const [kind, name] of LKINDS) {
-    if (kind === "none") continue;
-    const mine = accts.filter(a => acctKind(a) === kind); if (!mine.length) continue;
-    let sum = 0;
-    for (const r of S.rows) if (acctKind(r.account) === kind && catOf(r.group) === "in" && r.group !== "ROLLOVER" && taxYear(r) === Y) sum += r.amount;
-    const key = kind + ":" + Y, limit = S.lim.custom[key] != null ? S.lim.custom[key] : (LIMITS[kind][Y] || null);
-    const pct = limit ? sum / limit : 0, left = limit ? limit - sum : 0;
+  for (const [kind, name] of limitKinds()) {
+    const mine = accts.filter(a => acctKind(a) === kind);
+    const {sum, limit, key, pct, left} = limitFor(kind, Y);
     const input = h("input", {id: "lim-" + kind, type: "number", min: "0", step: "50", inputmode: "numeric", "aria-label": `${Y} limit for ${name}`, value: limit == null ? "" : limit, placeholder: "limit",
-      onchange: e => { const v = parseFloat(e.target.value); if (v > 0) S.lim.custom[key] = v; else delete S.lim.custom[key]; saveLim(); drawLimits(); }});
+      onchange: e => { const v = parseFloat(e.target.value); if (v > 0) S.lim.custom[key] = v; else delete S.lim.custom[key]; saveLim(); drawLimits(); if (S.last) drawHealth(S.last); }});
     let st;
     if (!limit) st = h("div", {class: "st"}, `No official ${Y} limit is built in yet. Enter it to see progress.`);
-    else if (left < -0.5) st = h("div", {class: "st"}, h("b", null, `\u26a0 Over by ${usd.format(-left)}. `), "Check for an excess contribution, or change a transaction type if something was counted by mistake.");
-    else if (left < 0.5) st = h("div", {class: "st"}, h("b", null, "\u2713 Maxed out."));
+    else if (left < -0.5) st = h("div", {class: "st"}, h("b", null, `⚠ Over by ${usd.format(-left)}. `), "Check for an excess contribution, or change a transaction type if something was counted by mistake.");
+    else if (left < 0.5) st = h("div", {class: "st"}, h("b", null, "✓ Maxed out."));
     else if (Y < last.y) st = h("div", {class: "st"}, h("b", null, usd.format(left)), ` of ${Y} room went unused` + (kind === "ira" && Y === last.y - 1 && last.m < 4 ? `, though IRA deposits for ${Y} are allowed until the April ${Y + 1} tax deadline.` : "."));
     else {
       const ml = 12 - last.m;
@@ -489,16 +564,24 @@ function drawLimits(){
         kind === "ira" ? ` IRA deposits for ${Y} are allowed until the April ${Y + 1} tax deadline.` : "");
     }
     box.push(h("div", {class: "lim"},
-      h("div", {class: "hd"}, h("div", null, h("strong", null, name), h("div", {class: "sub"}, mine.join(", "))), h("div", {class: "pct"}, limit ? Math.round(pct * 100) + "%" : "\u2013")),
+      h("div", {class: "hd"}, h("div", null, h("strong", null, name), h("div", {class: "sub"}, mine.join(", "))), h("div", {class: "pct"}, limit ? Math.round(pct * 100) + "%" : "–")),
       h("div", {class: "meter" + (pct > 1.0001 ? " over" : ""), role: "img", "aria-label": limit ? `${Math.round(pct * 100)} percent of the limit used` : "No limit set"}, h("div", {style: `width:${Math.min(100, pct * 100)}%`})),
       h("div", {class: "ln"}, h("strong", null, usd.format(sum)), "of", input, `in ${Y}`),
       st));
   }
-  $("#limits").replaceChildren(...(box.length ? box : [h("div", {class: "empty"}, "No IRA, 401(k) or HSA accounts were recognised. Set the type of each account below.")]));
+  $("#limits").replaceChildren(...(box.length ? box : [h("div", {class: "empty"}, "No IRA, 401(k) or HSA accounts were recognised. ", h("a", {href: "#acctCard"}, "Set the type of each account"), ".")]));
+}
+function drawAccounts(){
+  const info = new Map();
+  for (const r of S.rows) { let x = info.get(r.account); if (!x) info.set(r.account, x = {n: 0, a: r.date, b: r.date}); x.n++; x.b = r.date; }
+  const accts = [...info.keys()].sort();
   $("#acctTypes").replaceChildren(...accts.map((a, i) => {
-    const sel = h("select", {id: "acct-" + i, "aria-label": "Type of account " + a, onchange: e => { S.lim.types[a] = e.target.value; saveLim(); drawLimits(); }}, LKINDS.map(([k, n]) => h("option", {value: k}, n)));
+    const x = info.get(a);
+    const sel = h("select", {id: "acct-" + i, "aria-label": "Type of account " + a, onchange: e => { S.lim.types[a] = e.target.value; saveLim(); render(); }}, LKINDS.map(([k, n]) => h("option", {value: k}, n)));
     sel.value = acctKind(a);
-    return h("div", {class: "type"}, h("div", {class: "nm"}, a), sel);
+    return h("div", {class: "type"},
+      h("div", null, h("div", {class: "nm"}, a), h("div", {class: "ct"}, `${x.n.toLocaleString()} row${x.n === 1 ? "" : "s"}, ${MON[x.a.m - 1]} ${x.a.y} to ${MON[x.b.m - 1]} ${x.b.y}`)),
+      sel);
   }));
 }
 function buildLimYears(){
@@ -544,7 +627,7 @@ function compute(){
     if (r.date.y === ly) cur += r.amount;
     else if (r.date.y === ly - 1 && r.date.m * 100 + r.date.d <= cut) prev += r.amount;
   }
-  return {buyTot, months, periods, allMonths, minT, maxT, last, lo, cur, prev, ly,
+  return {buyTot, months, periods, allMonths, minT, maxT, last, lo, hi, cur, prev, ly,
     counted: counted.filter(x => x.r.t >= lo && x.r.t <= hi), rowsA,
     totIn: months.reduce((s, m) => s + m.in, 0), totOut: months.reduce((s, m) => s + m.out, 0)};
 }
@@ -552,25 +635,72 @@ function compute(){
 /* ---------- render ---------- */
 function render(){
   const C = compute(); if (!C) return;
+  S.last = C;
+  drawHealth(C);
+  if (S.view === "data") { drawSource(); drawTypes(C); drawAccounts(); drawSecs(C); drawTx(C); return; }
   const rangeName = S.range.startsWith("y:") ? S.range.slice(2) : {all: "all time", "12m": "last 12 months", "3y": "last 3 years"}[S.range];
-  const tile = (k, v, n) => h("div", {class: "tile"}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
-  const ld = C.last.date;
+  const tile = (k, v, n, size) => h("div", {class: "tile " + size}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
+  const ld = C.last.date, nOut = C.counted.filter(x => x.c === "out").length;
   const delta = C.prev > 0 ? `${C.cur >= C.prev ? "Up" : "Down"} ${Math.abs(Math.round((C.cur / C.prev - 1) * 100))}% on ${C.ly - 1} through ${MON[ld.m-1]} ${ld.d} (${usd.format(C.prev)})` : `Through ${MON[ld.m-1]} ${ld.d}`;
   $("#tiles").replaceChildren(
-    tile("Contributed, " + rangeName, usd.format(C.totIn), `${C.counted.filter(x => x.c === "in").length} deposits`),
-    tile(`${C.ly} so far`, usd.format(C.cur), delta),
-    tile("Average per month", usd.format(C.totIn / C.months.length), `Median ${usd.format(median(C.months.map(m => m.in)))}, over ${C.months.length} month${C.months.length === 1 ? "" : "s"}`),
-    tile("Withdrawn, " + rangeName, usd.format(C.totOut), `Net in: ${usd.format(C.totIn - C.totOut)}`)
+    tile(`Contributed in ${C.ly} so far`, usd.format(C.cur), delta, "hero"),
+    tile("Contributed, " + rangeName, usd.format(C.totIn), `${C.counted.filter(x => x.c === "in").length} deposits`, "sm"),
+    tile("Average per month", usd.format(C.totIn / C.months.length), `Median ${usd.format(median(C.months.map(m => m.in)))}`, "sm"),
+    tile("Withdrawn, " + rangeName, usd.format(C.totOut), `${nOut} withdrawal${nOut === 1 ? "" : "s"}`, "sm"),
+    tile("Net in, " + rangeName, usd.format(C.totIn - C.totOut), "Contributed minus withdrawn", "sm")
   );
   $("#barTitle").textContent = "Contributions by " + S.gran;
   const hasOut = C.totOut > 0;
-  $("#barLegend").replaceChildren(...(hasOut ? [h("span", null, h("i", {style: "background:var(--s1)"}), "Contributed"), h("span", null, h("i", {style: "background:var(--s2)"}), "Withdrawn")] : []));
+  $("#barLegend").replaceChildren(...(hasOut ? [h("span", null, h("i", {style: "background:var(--s1)"}), "Contributed"), h("span", null, h("i", {style: "background:var(--sx)"}), "Withdrawn")] : []));
   if (C.totIn === 0 && C.totOut === 0) {
-    const msg = () => h("div", {class: "empty"}, "Nothing is counted as a contribution yet. Check the transaction types below and mark the right ones as money in.");
+    const msg = () => h("div", {class: "empty"}, "Nothing is counted as a contribution yet. ", h("a", {href: "#typesCard"}, "Check the transaction types"), " and mark the right ones as money in.");
     $("#bar").replaceChildren(msg()); $("#line").replaceChildren(msg());
   } else { drawBars(C, hasOut); drawLine(C); }
-  drawLimits(); drawPace(C); drawCal(C); drawBuys(C); drawSecs(C); drawPivot(C); drawTypes(C); drawTx(C);
-  S.last = C;
+  drawLimits(); drawPace(C); drawCal(C); drawBuys(C); drawPivot(C);
+}
+
+/* ---------- status strip: breaches first, then neutral facts ---------- */
+function drawHealth(C){
+  const badge = (lvl, icon, text, href, onclick) => h(href ? "a" : "div", {class: "badge" + (lvl ? " " + lvl : ""), href,
+    onclick: href ? e => { if (onclick) onclick(); if (location.hash === href) { e.preventDefault(); route(); } } : null},
+    h("span", {class: "ic", "aria-hidden": "true"}, icon), h("span", null, text));
+  const alerts = [], facts = [];
+  const nErr = S.src.errors.length;
+  if (nErr) alerts.push(badge("crit", "✕", `${nErr} file${nErr === 1 ? "" : "s"} could not be read`, "#loader"));
+  const kinds = limitKinds(), years = [...new Set(S.rows.map(taxYear))].sort((a, b) => b - a);
+  let over = 0;
+  for (const Y of years) for (const [k] of kinds) {
+    const f = limitFor(k, Y);
+    if (f.limit && f.left < -0.5) { over++; alerts.push(badge("crit", "⚠", `Over the ${Y} ${LSHORT[k]} limit by ${usd.format(-f.left)}`, "#limCard", () => { S.limYear = Y; $("#limYear").value = Y; })); }
+  }
+  const U = unrecognised();
+  if (U.size) { let n = 0; for (const x of U.values()) n += x.n;
+    alerts.push(badge("warn", "⚠", `${U.size} transaction type${U.size === 1 ? "" : "s"} not recognised (${n} row${n === 1 ? "" : "s"})`, "#typesCard")); }
+  else facts.push(badge("", "✓", "All transaction types recognised", "#typesCard"));
+  const LY = C.last.date.y;
+  if (!kinds.length) facts.push(badge("", "–", "No IRA, 401(k) or HSA accounts recognised", "#acctCard"));
+  else if (!over) {
+    const parts = kinds.map(([k]) => { const f = limitFor(k, LY); return f.limit ? `${LSHORT[k]} ${Math.round(f.pct * 100)}%` : null; }).filter(Boolean);
+    facts.push(badge("", "✓", "No limits exceeded" + (parts.length ? `. ${LY}: ${parts.join(", ")}` : ""), "#limCard", () => { S.limYear = LY; $("#limYear").value = LY; }));
+  }
+  let dep = null; for (const {r, c} of C.counted) if (c === "in") dep = r;
+  if (!dep) for (const r of C.rowsA) if (catOf(r.group) === "in") dep = r;
+  const fmt = d => `${MON[d.m - 1]} ${d.d}, ${d.y}`;
+  facts.push(badge("", "•", (dep ? `Last deposit ${fmt(dep.date)}` : "No deposits counted") + `. Data through ${fmt(C.last.date)}`));
+  if (S.src.isSample) facts.push(badge("", "•", "Sample data: these numbers are made up", "#loader"));
+  $("#health").replaceChildren(...alerts, ...facts);
+}
+
+function drawSource(){
+  const tile = (k, v, n, flag) => h("div", {class: "tile sm" + (flag ? " flag" : "")}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
+  const a = S.rows[0].date, b = S.rows[S.rows.length - 1].date, nAcct = new Set(S.rows.map(r => r.account)).size;
+  const U = unrecognised(); let un = 0, us = 0; for (const x of U.values()) { un += x.n; us += Math.abs(x.sum); }
+  $("#dataTiles").replaceChildren(
+    tile("Transactions", S.rows.length.toLocaleString(), S.src.isSample ? "Sample data" : `From ${S.src.files} file${S.src.files === 1 ? "" : "s"}`),
+    tile("Date range", `${MON[a.m - 1]} ${a.y} to ${MON[b.m - 1]} ${b.y}`, `${nAcct} account${nAcct === 1 ? "" : "s"}`),
+    tile("Types not recognised", String(U.size), U.size ? `${un} row${un === 1 ? "" : "s"}, ${usd.format(us)}. Choose how to count them below.` : "Every type matched a known action", U.size > 0),
+    tile("Lines skipped", S.src.skipped.toLocaleString(), "Lines without a date, such as notes at the end of a file")
+  );
 }
 
 function median(a){ const b = a.slice().sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : 0; }
@@ -606,7 +736,7 @@ function drawBars(C, hasOut){
   P.forEach((p, i) => {
     const x = ml + i * band + (band - bw) / 2;
     if (p.in > 0) s += `<path d="${path(x, y(0), y(p.in), bw)}" fill="var(--s1)"/>`;
-    if (p.out > 0) s += `<path d="${path(x, y(0), y(-p.out), bw)}" fill="var(--s2)"/>`;
+    if (p.out > 0) s += `<path d="${path(x, y(0), y(-p.out), bw)}" fill="var(--sx)"/>`;
     if (n <= 12 && p.in > 0) s += `<text class="val" x="${x + bw/2}" y="${y(p.in) - 5}" text-anchor="middle">${compact(p.in)}</text>`;
     const yr = Math.floor(p.k / div), first = p.k % div === 0;
     let lab = null;
@@ -631,14 +761,14 @@ function drawBars(C, hasOut){
 }
 
 function drawPace(C){
-  const el = $("#pace"), y1 = Math.floor(C.maxT / 12), y0 = Math.max(Math.floor(C.minT / 12), y1 - 5), series = [];
+  const el = $("#pace"), y1 = Math.floor(C.hi / 12), y0 = Math.max(Math.floor(C.lo / 12), y1 - 5), series = [];
   for (let yr = y1; yr >= y0; yr--) {
     const pts = [0]; let run = 0;
-    for (let m = 0; m < 12; m++) { const t = yr * 12 + m; if (t > C.maxT) break; run += (C.allMonths.get(t) || {in: 0}).in; pts.push(run); }
+    for (let m = 0; m < 12; m++) { const t = yr * 12 + m; if (t > C.hi) break; run += (C.allMonths.get(t) || {in: 0}).in; pts.push(run); }
     series.push({yr, pts, end: run});
   }
   $("#paceTip").style.display = "none";
-  $("#paceNote").textContent = `Each line adds up one calendar year of contributions from January. Blue is ${y1}; grey lines are earlier years, fading with age.`;
+  $("#paceNote").textContent = y1 === y0 ? `Contributions in ${y1}, added up from January.` : `Each line adds up one calendar year of contributions from January, for the years in this period. Blue is ${y1}; grey lines are earlier years, fading with age.`;
   const maxV = Math.max(...series.map(q => q.end));
   if (!maxV) { el.replaceChildren(h("div", {class: "empty"}, "Nothing is counted as a contribution yet.")); return; }
   const W = el.clientWidth, H = 240, ml = 46, mr = 40, mt = 14, mb = 24, step = niceStep(maxV), top = Math.ceil(maxV / step) * step;
@@ -674,16 +804,16 @@ function drawPace(C){
 }
 
 function drawCal(C){
-  // streaks over every month in the file for the selected account
+  // streaks over the months in the selected period
   let run = 0, longest = 0, g = 0, gap = 0, cnt = 0, n = 0;
-  for (let t = C.minT; t <= C.maxT; t++) {
+  for (const m of C.months) {
     n++;
-    if ((C.allMonths.get(t) || {in: 0}).in > 0) { cnt++; run++; g = 0; longest = Math.max(longest, run); }
+    if (m.in > 0) { cnt++; run++; g = 0; longest = Math.max(longest, run); }
     else { run = 0; g++; gap = Math.max(gap, g); }
   }
   const mo = v => v + " month" + (v === 1 ? "" : "s");
   const stat = (k, v, e) => h("div", null, h("span", null, k), h("strong", null, v), e ? h("em", null, e) : null);
-  $("#streaks").replaceChildren(stat("Months with a deposit", `${cnt} of ${n}`, Math.round(cnt / n * 100) + "%"), stat("Current streak", mo(run)), stat("Longest streak", mo(longest)), stat("Longest gap", mo(gap)));
+  $("#streaks").replaceChildren(stat("Months with a deposit", `${cnt} of ${n}`, Math.round(cnt / n * 100) + "%"), stat(C.hi === C.maxT ? "Current streak" : "Streak at end of period", mo(run)), stat("Longest streak", mo(longest)), stat("Longest gap", mo(gap)));
   const days = new Map(); let max = 0;
   for (const {r, c} of C.counted) if (c === "in" && r.amount > 0) { const v = (days.get(r.ord) || 0) + r.amount; days.set(r.ord, v); max = Math.max(max, v); }
   const mix = [35, 55, 78, 100], fill = v => `color-mix(in srgb,var(--s1) ${mix[Math.min(3, Math.ceil(v / max * 4) - 1)]}%,var(--surface))`;
@@ -831,14 +961,12 @@ function drawLine(C){
 }
 
 function drawPivot(C){
-  const y0 = Math.floor(C.minT / 12), y1 = Math.floor(C.maxT / 12);
-  let max = 0; for (const m of C.allMonths.values()) max = Math.max(max, m.in);
+  const y0 = Math.floor(C.lo / 12), y1 = Math.floor(C.hi / 12), max = Math.max(0, ...C.months.map(m => m.in));
   const body = [];
   for (let yr = y1; yr >= y0; yr--) {
     let tot = 0; const tds = [];
     for (let mo = 0; mo < 12; mo++) {
-      const t = yr * 12 + mo, v = (C.allMonths.get(t) || {in: 0}).in; tot += v;
-      const outside = t < C.minT || t > C.maxT;
+      const t = yr * 12 + mo, outside = t < C.lo || t > C.hi, v = outside ? 0 : C.months[t - C.lo].in; tot += v;
       tds.push(h("td", {class: v ? null : "z", style: v > 0 && max ? `background:color-mix(in srgb,var(--s1) ${Math.round(6 + 34 * v / max)}%,transparent)` : null}, outside ? "" : v ? usd.format(v) : "–"));
     }
     body.push(h("tr", null, h("td", null, yr), tds, h("td", {class: "tot"}, usd.format(tot))));
@@ -849,34 +977,53 @@ function drawPivot(C){
 }
 
 function drawTypes(C){
-  const g = new Map();
+  const g = new Map(), U = unrecognised(), CATN = {in: "money in", out: "money out", skip: "left out"};
   for (const r of C.rowsA) { let x = g.get(r.group); if (!x) g.set(r.group, x = {n: 0, sum: 0}); x.n++; x.sum += r.amount; }
-  const order = {in: 0, out: 1, skip: 2};
-  const list = [...g.entries()].sort((a, b) => order[catOf(a[0])] - order[catOf(b[0])] || b[1].n - a[1].n);
+  const order = {in: 1, out: 2, skip: 3}, rank = k => U.has(k) ? 0 : order[catOf(k)];
+  const list = [...g.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || b[1].n - a[1].n);
   $("#types").replaceChildren(...list.map(([name, x], i) => {
+    const unk = U.has(name);
     const sel = h("select", {id: "type-" + i, "aria-label": "How to count " + name, onchange: e => {
+      if (!e.target.value) return;
       S.overrides[name] = e.target.value;
       try { localStorage.setItem("fct-cats", JSON.stringify(S.overrides)); } catch (err) {}
       render();
-    }}, h("option", {value: "in"}, "Money in"), h("option", {value: "out"}, "Money out"), h("option", {value: "skip"}, "Leave out"));
-    sel.value = catOf(name);
+    }}, unk ? h("option", {value: ""}, `Choose (now ${CATN[catOf(name)]})`) : null,
+      h("option", {value: "in"}, "Money in"), h("option", {value: "out"}, "Money out"), h("option", {value: "skip"}, "Leave out"));
+    sel.value = unk ? "" : catOf(name);
     return h("div", {class: "type"},
-      h("div", null, h("div", {class: "nm"}, name.charAt(0) + name.slice(1).toLowerCase()), h("div", {class: "ct"}, `${x.n} row${x.n === 1 ? "" : "s"}, ${usd.format(x.sum)} total`)),
+      h("div", null, h("div", {class: "nm"}, unk ? h("span", {class: "tag"}, "Not recognised") : null, name.charAt(0) + name.slice(1).toLowerCase()), h("div", {class: "ct"}, `${x.n} row${x.n === 1 ? "" : "s"}, ${usd.format(x.sum)} total`)),
       sel);
   }));
 }
 
 function drawTx(C){
-  const all = C.counted.slice().reverse(), show = S.showAll ? all : all.slice(0, 10);
+  const left = S.txMode === "skip";
+  const rows = left ? C.rowsA.filter(r => r.t >= C.lo && r.t <= C.hi && catOf(r.group) === "skip").map(r => ({r, c: "skip"})) : C.counted;
+  const all = rows.slice().reverse(), show = S.showAll ? all : all.slice(0, 10);
+  $("#txNote").textContent = left ? "Rows in this period that are not counted as money in or out: buys, sells, dividends, moves between your own accounts, and any type set to leave out."
+    : "Rows in this period counted as money in or money out.";
   const kids = [h("table", {class: "tx"},
     h("thead", null, h("tr", null, h("th", null, "Date"), h("th", {style: "text-align:left"}, "Account"), h("th", {style: "text-align:left"}, "Type"), h("th", null, "Amount"))),
     h("tbody", null, show.map(({r, c}) => h("tr", null,
       h("td", null, `${MON[r.date.m-1]} ${r.date.d}, ${r.date.y}`), h("td", null, r.account),
       h("td", null, r.group.charAt(0) + r.group.slice(1).toLowerCase()),
-      h("td", null, (c === "out" ? "−" : "") + usd2.format(Math.abs(r.amount)))))))];
-  if (!all.length) kids.length = 0, kids.push(h("div", {class: "empty"}, "No counted transactions in this period."));
+      h("td", null, (c === "out" || (c === "skip" && r.amount < 0) ? "−" : "") + usd2.format(Math.abs(r.amount)))))))];
+  if (!all.length) kids.length = 0, kids.push(h("div", {class: "empty"}, left ? "Nothing was left out in this period." : "No counted transactions in this period."));
   else if (all.length > show.length) kids.push(h("div", {style: "padding-top:10px"}, h("button", {type: "button", onclick: () => { S.showAll = true; drawTx(S.last); }}, `Show all ${all.length.toLocaleString()}`)));
   $("#tx").replaceChildren(...kids);
+}
+
+/* ---------- views: #data, or any id inside the Data view, opens it; anything else opens Overview ---------- */
+function route(){
+  const id = location.hash.slice(1), target = id ? document.getElementById(id) : null;
+  const view = id === "data" || (target && target.closest("#v-data")) ? "data" : "overview";
+  const changed = view !== S.view; S.view = view;
+  for (const v of ["overview", "data"]) { $("#v-" + v).hidden = v !== view; $("#tab-" + v).setAttribute("aria-selected", String(v === view)); }
+  $("#granBox").hidden = view === "data";
+  if (changed) S.showAll = false;
+  render();
+  if (target && !target.matches(".view")) target.scrollIntoView({block: "start"});
 }
 
 /* ---------- events ---------- */
@@ -896,17 +1043,23 @@ $("#gran").addEventListener("click", e => {
 });
 $("#copy").addEventListener("click", async e => {
   const C = S.last; if (!C) return; const lines = ["Month,Contributed,Withdrawn"];
-  for (let t = C.minT; t <= C.maxT; t++) { const m = C.allMonths.get(t) || {in: 0, out: 0}; lines.push(`${Math.floor(t/12)}-${String(t % 12 + 1).padStart(2,"0")},${m.in.toFixed(2)},${m.out.toFixed(2)}`); }
+  for (const m of C.months) lines.push(`${Math.floor(m.t/12)}-${String(m.t % 12 + 1).padStart(2,"0")},${m.in.toFixed(2)},${m.out.toFixed(2)}`);
   const b = e.currentTarget;
   try { await navigator.clipboard.writeText(lines.join("\n")); b.textContent = "Copied"; } catch (err) { b.textContent = "Copy was blocked"; }
   setTimeout(() => b.textContent = "Copy monthly totals", 1800);
 });
-const ld = $("#loader");
+$("#txMode").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  S.txMode = b.dataset.m; S.showAll = false; for (const x of $("#txMode").children) x.setAttribute("aria-pressed", String(x === b)); if (S.last) drawTx(S.last);
+});
+window.addEventListener("hashchange", route);
+const ld = $("main");
 document.addEventListener("dragover", e => { e.preventDefault(); ld.classList.add("drop"); });
 document.addEventListener("dragleave", e => { if (!e.relatedTarget) ld.classList.remove("drop"); });
 document.addEventListener("drop", e => { e.preventDefault(); ld.classList.remove("drop"); if (e.dataTransfer) takeFiles(e.dataTransfer.files); });
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => S.rows.length && render(), 150); });
 
+route();
 load([{name: "sample.csv", text: sampleCSV()}], true);
 </script>
 </body>

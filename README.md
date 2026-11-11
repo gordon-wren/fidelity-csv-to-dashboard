@@ -12,16 +12,26 @@ The page opens on made-up sample data until you load your own.
 
 ## What it shows
 
-- **Summary tiles:** total contributed, latest year against the prior year's pace, average and median per month, withdrawals and net.
+The page has two views, switched by the tabs under the title. A row of status badges sits above both. Problems come first, such as an annual limit exceeded, a file that could not be read, or transaction types the page does not recognise, and each badge links to where you can check or fix it. Red and amber are used only for these problems.
+
+**Overview**, for checking whether you're on track:
+
 - **Annual limit tracker:** progress against IRA, 401(k) and HSA limits, with the monthly amount needed to max out.
+- **Headline numbers:** contributed this year against the prior year's pace, then total, average and median per month, withdrawals and net for the selected period.
 - **Contributions by month, quarter or year,** with withdrawals shown below the axis.
 - **Running total,** net of withdrawals.
-- **Year-over-year pace:** one cumulative line per calendar year.
+- **Year-over-year pace:** one cumulative line per calendar year in the period.
 - **Consistency:** a calendar of deposit days, plus streaks and gaps.
 - **Purchases by type:** buys split into individual stocks, ETFs, mutual funds and other.
 - **Year by month table,** with a button to copy monthly totals as CSV.
 
-Filters for account, period and grouping apply to everything except the limit tracker, which always covers all accounts.
+**Data and settings**, for checking the numbers are right:
+
+- **Data source:** files loaded, date range, lines skipped and any read errors.
+- **Transaction types, accounts and holdings:** how each is counted, with anything not recognised listed first.
+- **Transactions:** the rows that were counted, or the rows that were left out.
+
+The account and period filters apply to everything except the limit tracker, which always covers all accounts.
 
 ## How transactions are counted
 
@@ -33,13 +43,13 @@ The export does not say which rows are contributions, so the page guesses from t
 
 Holding types are guessed from the ticker and name: five-letter tickers ending in X are mutual funds, names containing "ETF" or a known issuer are ETFs, other plain tickers are individual stocks, and money market sweeps are ignored. Index funds are not separated from other funds.
 
-Every guess can be changed on the page. Choices are saved in the browser's local storage, not in the file.
+Every guess can be changed under **Data and settings**. Choices are saved in the browser's local storage, not in the file.
 
 ## Limits
 
 Built-in limits are the under-50 amounts for 2022 to 2026, plus the 2027 HSA limits. Type over a limit if catch-up applies to you or to enter a year that is not built in. Things to check:
 
-- Account types are guessed from the account name. Set them under **Account types** if the guess is wrong.
+- Account types are guessed from the account name. Set them under **Data and settings**, in **Accounts**, if the guess is wrong.
 - Employer match counts toward your progress if the file does not label it separately. Mark that transaction type as left out.
 - IRA deposits marked "prior year" count toward the year before. Rollovers are not counted.
 
