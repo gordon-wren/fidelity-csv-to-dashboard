@@ -28,7 +28,7 @@ The page has two views, switched by the tabs under the title. A row of status ba
 **Data and settings**, for checking the numbers are right:
 
 - **Data source:** files loaded, date range, lines skipped and any read errors.
-- **Transaction types, accounts and holdings:** how each is counted, with anything not recognised listed first.
+- **Transaction types, accounts and holdings:** how each is counted, with anything not recognised listed first. Each transaction type can be expanded to show its rows exactly as they appear in your file (account numbers are shortened to the last four digits).
 - **Transactions:** the rows that were counted, or the rows that were left out.
 
 The account and period filters apply to everything except the limit tracker, which always covers all accounts.
