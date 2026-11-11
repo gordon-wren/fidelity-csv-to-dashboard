@@ -89,6 +89,15 @@ label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--in
   .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr))}
   .w12{grid-column:span 12}.w8{grid-column:span 8}.w7{grid-column:span 7}.w6{grid-column:span 6}.w5{grid-column:span 5}.w4{grid-column:span 4}
 }
+.acctbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;min-width:0}
+.acctbar .lbl{font-size:12px;color:var(--ink-2)}
+.acctbar input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:8px;padding:7px 10px;min-height:38px;width:min(16rem,100%)}
+.accts{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0;max-width:100%;padding:2px}
+.accts button{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;padding:6px 12px;text-align:left}
+.accts button .no{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.accts button[aria-pressed=true]{background:var(--ink);color:var(--page);border-color:var(--ink);font-weight:600}
+.accts button[aria-pressed=true] .no{color:var(--page);opacity:.8;font-weight:400}
+.accts .none{font-size:13px;color:var(--ink-2);padding:8px 4px}
 .health{display:flex;flex-wrap:wrap;gap:8px}
 .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-height:34px;text-decoration:none}
 a.badge:hover{background:var(--wash)}
@@ -170,7 +179,6 @@ details>div{margin-top:10px}
         <a role="tab" href="#data" id="tab-data" aria-controls="v-data" aria-selected="false">Data and settings</a>
       </nav>
       <section class="row" aria-label="Filters">
-        <label class="f" for="account">Account<select id="account"></select></label>
         <label class="f" for="range">Period<select id="range"></select></label>
         <div class="f" id="granBox"><span>Group by</span>
           <div class="seg" id="gran" role="group" aria-label="Group by">
@@ -181,6 +189,11 @@ details>div{margin-top:10px}
         </div>
       </section>
     </div>
+    <section class="acctbar" aria-label="Accounts">
+      <span class="lbl" id="acctLbl">Account</span>
+      <input id="acctFind" type="search" placeholder="Find by name or number" aria-label="Find an account by name or number" hidden>
+      <div class="accts" id="accts" role="group" aria-labelledby="acctLbl"></div>
+    </section>
   </header>
 
   <section class="health" id="health" aria-label="Status"></section>
@@ -441,7 +454,7 @@ function ingestFile(name, text){
     const action = cols.act >= 0 ? (r[cols.act] || "").trim() : "";
     const desc = cols.desc >= 0 && cols.desc !== cols.act ? (r[cols.desc] || "").trim() : "";
     const sym = cols.sym >= 0 ? (r[cols.sym] || "").trim().toUpperCase() : "";
-    out.push({sym, sec: sym || (cols.inv ? desc : ""), secName: desc && !/^no description$/i.test(desc) ? desc : action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d, account, action,
+    out.push({sym, sec: sym || (cols.inv ? desc : ""), secName: desc && !/^no description$/i.test(desc) ? desc : action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d, account, acctName: nm, acctNum: num, action,
       group: groupOf(action), amount, desc, raw: r, header});
   }
   return {rows: out, skipped};
@@ -472,6 +485,7 @@ function sampleCSV(){
   for (let y = 2022; y <= 2026; y++) for (let m = 1; m <= 12; m++) {
     if (y === 2026 && m > 10) break;
     add(y, m, 15, "ROTH IRA", "X11112222", "CASH CONTRIBUTION CURRENT YEAR (Cash)", y === 2022 ? 500 : y === 2023 ? 541.66 : 583.33);
+    if (y >= 2024) add(y, m, 20, "HEALTH SAVINGS ACCOUNT", "249998888", "CONTRIBUTION (Cash)", 250);
     if ((m + y) % 4) add(y, m, 3, "Individual", "Z33334444", "Electronic Funds Transfer Received (Cash)", 300 + ((m*37 + y*13) % 5) * 150);
     add(y, m, 16, "ROTH IRA", "X11112222", "YOU BOUGHT FIDELITY 500 INDEX FUND (FXAIX) (Cash)", y === 2022 ? -500 : y === 2023 ? -541.66 : -583.33, "FXAIX");
     add(y, m, 5, "Individual", "Z33334444", "YOU BOUGHT VANGUARD TOTAL STOCK MKT ETF (VTI) (Cash)", -350, "VTI");
@@ -512,9 +526,13 @@ function load(files, isSample){
   const a = S.rows[0].date, b = S.rows[S.rows.length-1].date;
   $("#status").textContent = isSample ? "These numbers are made up. Load your own export to replace them."
     : `${files.length - res.errors.length} file${files.length - res.errors.length === 1 ? "" : "s"}, ${S.rows.length.toLocaleString()} transactions, ${MON[a.m-1]} ${a.y} to ${MON[b.m-1]} ${b.y}.` + (res.skipped ? ` ${res.skipped} non-data line${res.skipped === 1 ? "" : "s"} skipped.` : "");
-  const accts = [...new Set(S.rows.map(r => r.account))].sort();
-  $("#account").replaceChildren(h("option", {value: "all"}, "All accounts"), ...accts.map(x => h("option", {value: x}, x)));
-  buildRanges(); buildLimYears(); render();
+  const info = new Map();
+  for (const r of S.rows) { let x = info.get(r.account); if (!x) info.set(r.account, x = {id: r.account, name: r.acctName || (r.acctNum ? "" : r.account), num: r.acctNum, n: 0}); x.n++; }
+  S.accts = [...info.values()].sort((a, b) => a.id.localeCompare(b.id));
+  // Last four digits, or more when two accounts share them.
+  for (const a of S.accts) { let n = 4; while (n < a.num.length && S.accts.some(b => b !== a && b.num.slice(-n) === a.num.slice(-n))) n++; a.n4 = n; a.label = (a.name || "Account") + (a.num ? " " + (n >= a.num.length ? a.num : "··" + a.num.slice(-n)) : ""); }
+  const find = $("#acctFind"); find.value = ""; find.hidden = S.accts.length < 5;
+  drawAcctBar(); buildRanges(); buildLimYears(); render();
 }
 
 // Period choices come from the dates actually present for the selected account.
@@ -530,6 +548,30 @@ function buildRanges(){
   const sel = $("#range"); sel.replaceChildren(...opts);
   if (!opts.some(o => o.value === S.range)) S.range = "all";
   sel.value = S.range;
+}
+
+// The account switcher, shared by both views. The search matches the name or any part of the full account number.
+function drawAcctBar(){
+  const q = $("#acctFind").value.trim().toLowerCase().replace(/\s+/g, " ");
+  const qn = q.replace(/^[·.]+/, ""), at = a => qn ? a.num.toLowerCase().indexOf(qn) : -1;
+  const hit = a => !q || a.id === S.account || a.name.toLowerCase().includes(q) || at(a) >= 0;
+  // Show more digits from where the search matched.
+  const short = a => {
+    let n = a.n4; const i = at(a); if (i >= 0) n = Math.max(n, a.num.length - i);
+    return n >= a.num.length ? a.num : "··" + a.num.slice(-n);
+  };
+  const chip = (id, name, no) => h("button", {type: "button", "aria-pressed": String(S.account === id), onclick: () => setAccount(id)},
+    h("span", null, name), no ? h("span", {class: "no"}, no) : null);
+  const list = S.accts.filter(hit);
+  const kids = [chip("all", "All accounts", `${S.accts.length} account${S.accts.length === 1 ? "" : "s"}`),
+    ...list.map(a => chip(a.id, a.name || "Account", a.num ? short(a) : ""))];
+  if (q && !list.length) kids.push(h("span", {class: "none"}, "No account matches."));
+  $("#accts").replaceChildren(...kids);
+}
+function setAccount(id){
+  if (id === S.account) return;
+  S.account = id; S.showAll = false; S.tyAll = false;
+  drawAcctBar(); buildRanges(); render();
 }
 
 /* ---------- limits ---------- */
@@ -721,13 +763,14 @@ function drawHealth(C){
   if (!dep) for (const r of C.rowsA) if (catOf(r.group) === "in") dep = r;
   const fmt = d => `${MON[d.m - 1]} ${d.d}, ${d.y}`;
   facts.push(badge("", "•", (dep ? `Last deposit ${fmt(dep.date)}` : "No deposits counted") + `. Data through ${fmt(C.last.date)}`));
+  if (S.account !== "all") facts.unshift(badge("", "•", `Showing ${(S.accts.find(a => a.id === S.account) || {label: S.account}).label} only. Limits still count every account`, null));
   if (S.src.isSample) facts.push(badge("", "•", "Sample data: these numbers are made up", "#loader"));
   $("#health").replaceChildren(...alerts, ...facts);
 }
 
 function drawTaxYears(){
-  const list = S.rows.filter(canBePrior).reverse(), show = S.tyAll ? list : list.slice(0, 8);
-  if (!list.length) { $("#tyList").replaceChildren(h("div", {class: "empty"}, "No IRA or HSA deposits made from January to April.")); return; }
+  const list = S.rows.filter(r => (S.account === "all" || r.account === S.account) && canBePrior(r)).reverse(), show = S.tyAll ? list : list.slice(0, 8);
+  if (!list.length) { $("#tyList").replaceChildren(h("div", {class: "empty"}, "No IRA or HSA deposits made from January to April" + (S.account === "all" ? "." : " in this account."))); return; }
   const kids = show.map((r, i) => {
     const k = rowKey(r), y = r.date.y, auto = labelYear(r), mine = S.ty[k] != null;
     const sel = h("select", {id: "ty-" + i, "aria-label": `Tax year for the ${MON[r.date.m - 1]} ${r.date.d}, ${y} deposit to ${r.account}`, onchange: e => {
@@ -1109,7 +1152,11 @@ async function takeFiles(list){
 }
 $("#file").addEventListener("change", e => { takeFiles(e.target.files); e.target.value = ""; });
 $("#sample").addEventListener("click", () => load([{name: "sample.csv", text: sampleCSV()}], true));
-$("#account").addEventListener("change", e => { S.account = e.target.value; S.showAll = false; buildRanges(); render(); });
+$("#acctFind").addEventListener("input", drawAcctBar);
+$("#acctFind").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return; e.preventDefault();
+  const b = [...$("#accts").querySelectorAll("button")]; if (b.length > 1) b[1].click();
+});
 $("#limYear").addEventListener("change", e => { S.limYear = +e.target.value; drawLimits(); });
 $("#range").addEventListener("change", e => { S.range = e.target.value; S.showAll = false; render(); });
 $("#gran").addEventListener("click", e => {
