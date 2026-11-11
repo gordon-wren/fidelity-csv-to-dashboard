@@ -192,7 +192,7 @@ details>div{margin-top:10px}
         <h2>Annual limits</h2>
         <label class="f" for="limYear">Tax year<select id="limYear"></select></label>
       </div>
-      <p class="sub">All accounts, whatever the account filter says. Rollovers are not counted, and IRA deposits marked prior year count toward the year before. Limits are the under-50 amounts; type over one if catch-up applies to you.</p>
+      <p class="sub">All accounts, whatever the account filter says. Rollovers are not counted. IRA and HSA deposits made January to April that are labelled prior year count toward the year before; <a href="#tyCard">check which year each one counts for</a>. Limits are the under-50 amounts; type over one if catch-up applies to you.</p>
       <div id="limits"></div>
       <p class="sub">Account types are guessed from account names. <a href="#acctCard">Change them under Data and settings</a>.</p>
     </section>
@@ -287,6 +287,14 @@ details>div{margin-top:10px}
         <div class="types" id="secs"></div>
       </section>
     </div>
+
+    <section class="card w12" id="tyCard">
+      <div>
+        <h2>Which tax year deposits count for</h2>
+        <p class="sub">IRA and HSA deposits made from January to April can count toward the previous year's limit, up to the April tax deadline. Deposits labelled prior year are moved automatically. Change any that are wrong; your choices are remembered in this browser.</p>
+      </div>
+      <div class="types" id="tyList"></div>
+    </section>
 
     <section class="card w12">
       <div class="row spread">
@@ -384,7 +392,7 @@ function groupOf(action){
   for (const [p] of PREFIXES) if (u.startsWith(p)) return p;
   return u.split(" ").slice(0, 3).join(" ");
 }
-function defaultCat(g){ return DEFAULTS[g] || (/CONTRIB|PAYROLL|MATCH/.test(g) ? "in" : "skip"); }
+function defaultCat(g){ return DEFAULTS[g] || (/CONTRIB|\bCONTR\b|PAYROLL|MATCH/.test(g) ? "in" : "skip"); }
 
 // Holding types. Guessed from ticker shape and name; the viewer can override each one.
 const KINDS = [["stock","Individual stocks","--s1"],["etf","ETFs","--s2"],["fund","Mutual funds","--s3"],["other","Other","--s4"]];
@@ -542,7 +550,26 @@ function acctKind(a){
   if (/401|403|457/.test(a)) return "k401";
   return "none";
 }
-const taxYear = r => r.date.y - (/PRIOR YEAR/i.test(r.action) ? 1 : 0);
+// Tax year for limits. A deposit made January to April can count for the year before. The label decides by default
+// ("prior year", "PY", "for 2025" and similar, in the action or description); the viewer can override any one deposit.
+const PRIOR_RE = /\bPRIOR[\s-]*(YEAR|YR)\b|\bPREV(IOUS)?[\s-]*(YEAR|YR)\b|\bLAST[\s-]*YEAR\b|\bP\/?Y\b/i;
+const CURRENT_RE = /\bCURRENT[\s-]*(YEAR|YR)\b|\bC\/?Y\b/i;
+function labelYear(r){
+  const y = r.date.y, text = r.action + " " + r.desc;
+  if (CURRENT_RE.test(text)) return y;
+  if (PRIOR_RE.test(text)) return y - 1;
+  const m = /\b(?:FOR|TAX[\s-]*YEAR|TY)[\s:]*(\d{4})\b|\b(\d{4})[\s-]+CONTR/i.exec(text);
+  return m && +(m[1] || m[2]) === y - 1 ? y - 1 : y;
+}
+// Override keys are a hash of the row, so localStorage never holds account names, dates or amounts.
+function rowKey(r){
+  let x = 0x811c9dc5; const k = [r.account, r.ord, r.action, r.amount, r.desc].join("|");
+  for (let i = 0; i < k.length; i++) { x ^= k.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; }
+  return x.toString(36);
+}
+S.ty = {}; try { S.ty = JSON.parse(localStorage.getItem("fct-ty") || "{}") || {}; } catch (e) {}
+const canBePrior = r => r.date.m <= 4 && catOf(r.group) === "in" && r.group !== "ROLLOVER" && /^(ira|hsa1|hsa2)$/.test(acctKind(r.account));
+const taxYear = r => { if (!canBePrior(r)) return r.date.y; const o = S.ty[rowKey(r)]; return o != null ? o : labelYear(r); };
 const LSHORT = {ira: "IRA", k401: "401(k)", hsa1: "HSA", hsa2: "HSA"};
 const limitKinds = () => { const accts = new Set(S.rows.map(r => r.account)); return LKINDS.filter(([k]) => k !== "none" && [...accts].some(a => acctKind(a) === k)); };
 function limitFor(kind, Y){
@@ -562,7 +589,7 @@ function drawLimits(){
       onchange: e => { const v = parseFloat(e.target.value); if (v > 0) S.lim.custom[key] = v; else delete S.lim.custom[key]; saveLim(); drawLimits(); if (S.last) drawHealth(S.last); }});
     let st;
     if (!limit) st = h("div", {class: "st"}, `No official ${Y} limit is built in yet. Enter it to see progress.`);
-    else if (left < -0.5) st = h("div", {class: "st"}, h("b", null, `⚠ Over by ${usd.format(-left)}. `), "Check for an excess contribution, or change a transaction type if something was counted by mistake.");
+    else if (left < -0.5) st = h("div", {class: "st"}, h("b", null, `⚠ Over by ${usd.format(-left)}. `), "Check for an excess contribution, a deposit that was for the year before (", h("a", {href: "#tyCard"}, "check tax years"), "), or a transaction type counted by mistake.");
     else if (left < 0.5) st = h("div", {class: "st"}, h("b", null, "✓ Maxed out."));
     else if (Y < last.y) st = h("div", {class: "st"}, h("b", null, usd.format(left)), ` of ${Y} room went unused` + (kind === "ira" && Y === last.y - 1 && last.m < 4 ? `, though IRA deposits for ${Y} are allowed until the April ${Y + 1} tax deadline.` : "."));
     else {
@@ -593,7 +620,7 @@ function drawAccounts(){
 }
 function buildLimYears(){
   const ys = [...new Set(S.rows.map(taxYear))].sort((a, b) => b - a);
-  S.limYear = S.rows[S.rows.length - 1].date.y;
+  if (!ys.includes(S.limYear)) S.limYear = S.rows[S.rows.length - 1].date.y;
   const sel = $("#limYear"); sel.replaceChildren(...ys.map(y => h("option", {value: y}, y))); sel.value = S.limYear;
 }
 
@@ -644,7 +671,7 @@ function render(){
   const C = compute(); if (!C) return;
   S.last = C;
   drawHealth(C);
-  if (S.view === "data") { drawSource(); drawTypes(C); drawAccounts(); drawSecs(C); drawTx(C); return; }
+  if (S.view === "data") { drawSource(); drawTypes(C); drawAccounts(); drawSecs(C); drawTaxYears(); drawTx(C); return; }
   const rangeName = S.range.startsWith("y:") ? S.range.slice(2) : {all: "all time", "12m": "last 12 months", "3y": "last 3 years"}[S.range];
   const tile = (k, v, n, size) => h("div", {class: "tile " + size}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
   const ld = C.last.date, nOut = C.counted.filter(x => x.c === "out").length;
@@ -696,6 +723,27 @@ function drawHealth(C){
   facts.push(badge("", "•", (dep ? `Last deposit ${fmt(dep.date)}` : "No deposits counted") + `. Data through ${fmt(C.last.date)}`));
   if (S.src.isSample) facts.push(badge("", "•", "Sample data: these numbers are made up", "#loader"));
   $("#health").replaceChildren(...alerts, ...facts);
+}
+
+function drawTaxYears(){
+  const list = S.rows.filter(canBePrior).reverse(), show = S.tyAll ? list : list.slice(0, 8);
+  if (!list.length) { $("#tyList").replaceChildren(h("div", {class: "empty"}, "No IRA or HSA deposits made from January to April.")); return; }
+  const kids = show.map((r, i) => {
+    const k = rowKey(r), y = r.date.y, auto = labelYear(r), mine = S.ty[k] != null;
+    const sel = h("select", {id: "ty-" + i, "aria-label": `Tax year for the ${MON[r.date.m - 1]} ${r.date.d}, ${y} deposit to ${r.account}`, onchange: e => {
+      const v = +e.target.value; if (v === auto) delete S.ty[k]; else S.ty[k] = v;
+      try { localStorage.setItem("fct-ty", JSON.stringify(S.ty)); } catch (err) {}
+      buildLimYears(); render();
+    }}, h("option", {value: y}, `Counts for ${y}`), h("option", {value: y - 1}, `Counts for ${y - 1}`));
+    sel.value = taxYear(r);
+    const why = mine ? "Set by you" : auto === y - 1 ? "Labelled prior year" : "Year of the deposit";
+    return h("div", {class: "type"},
+      h("div", null, h("div", {class: "nm"}, `${MON[r.date.m - 1]} ${r.date.d}, ${y} · ${usd2.format(r.amount)} · ${r.account}`),
+        h("div", {class: "ct"}, `${r.action}${r.desc && !/^no description$/i.test(r.desc) ? " · " + r.desc : ""} · ${why}`)),
+      sel);
+  });
+  if (list.length > show.length) kids.push(h("div", {style: "padding-top:10px"}, h("button", {type: "button", onclick: () => { S.tyAll = true; drawTaxYears(); }}, `Show all ${list.length.toLocaleString()}`)));
+  $("#tyList").replaceChildren(...kids);
 }
 
 function drawSource(){
