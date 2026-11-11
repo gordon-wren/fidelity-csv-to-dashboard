@@ -31,7 +31,7 @@ The page has two views, switched by the tabs under the title. A row of status ba
 - **Transaction types, accounts and holdings:** how each is counted, with anything not recognised listed first. Each transaction type can be expanded to show its rows exactly as they appear in your file (account numbers are shortened to the last four digits).
 - **Transactions:** the rows that were counted, or the rows that were left out.
 
-The account and period filters apply to everything except the limit tracker, which always covers all accounts.
+The account switcher under the tabs shows each account by name and the last four digits of its number, on both dashboards. Pick one to see only that account, or **All accounts** to combine them. With five or more accounts, a search box finds an account by any part of its name or number. The account and period filters apply to everything except the limit tracker, which always covers all accounts.
 
 ## How transactions are counted
 
