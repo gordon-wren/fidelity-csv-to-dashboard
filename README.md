@@ -51,7 +51,7 @@ Built-in limits are the under-50 amounts for 2022 to 2026, plus the 2027 HSA lim
 
 - Account types are guessed from the account name. Set them under **Data and settings**, in **Accounts**, if the guess is wrong.
 - Employer match counts toward your progress if the file does not label it separately. Mark that transaction type as left out.
-- IRA deposits marked "prior year" count toward the year before. Rollovers are not counted.
+- IRA and HSA deposits made January to April count toward the year before when the action or description says so ("prior year", "prior yr", "PY", "for 2025" and similar). Under **Data and settings › Which tax year deposits count for** you can set the year for any one of those deposits. Rollovers are not counted.
 
 This is a personal tracking tool, not tax advice. Confirm limits and excess contributions with the IRS or a tax professional.
 
