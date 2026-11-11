@@ -273,7 +273,7 @@ details>div{margin-top:10px}
       <p class="sub" id="status">These numbers are made up. Load your own export to replace them.</p>
       <div id="errors"></div>
       <div class="tiles" id="dataTiles"></div>
-      <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
+      <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. A plan statement summary (columns account_number, start_date, end_date, additions and so on) can be added alongside; each period becomes rows for a "401(k)" account. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
     </section>
 
     <section class="card w7" id="typesCard">
@@ -396,7 +396,9 @@ const PREFIXES = [
   ["DIVIDEND RECEIVED","skip"],["REINVESTMENT","skip"],["INTEREST EARNED","skip"],
   ["LONG-TERM CAP GAIN","skip"],["SHORT-TERM CAP GAIN","skip"],["FOREIGN TAX PAID","skip"],
   ["FEE CHARGED","skip"],["JOURNALED","skip"],["ROTH CONVERSION","skip"],["CHANGE IN MARKET VALUE","skip"],
-  ["EXCHANGE","skip"],["DIVIDEND","skip"],["REDEMPTION","skip"],["PURCHASE","skip"]
+  ["EXCHANGE","skip"],["DIVIDEND","skip"],["REDEMPTION","skip"],["PURCHASE","skip"],
+  // Column names from plan statement summaries (see ingestSummary). Withdrawals match WITHDRAWAL above.
+  ["ADDITIONS","in"],["TRANSFERS","skip"],["NET EARNINGS","skip"]
 ].sort((a,b) => b[0].length - a[0].length);
 const DEFAULTS = Object.fromEntries(PREFIXES);
 function groupOf(action){
@@ -427,6 +429,7 @@ function ingestFile(name, text){
   let hi = -1, cols = null;
   for (let i = 0; i < Math.min(rows.length, 60); i++) {
     const lc = rows[i].map(c => c.trim().toLowerCase());
+    if (["account_number", "end_date", "additions"].every(c => lc.includes(c))) return ingestSummary(name, rows, i);
     const d = lc.findIndex(c => /^(run date|date|trade date|transaction date)$/.test(c));
     const a = lc.findIndex(c => /^amount/.test(c));
     if (d >= 0 && a >= 0) {
@@ -456,6 +459,35 @@ function ingestFile(name, text){
     const sym = cols.sym >= 0 ? (r[cols.sym] || "").trim().toUpperCase() : "";
     out.push({sym, sec: sym || (cols.inv ? desc : ""), secName: desc && !/^no description$/i.test(desc) ? desc : action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d, account, acctName: nm, acctNum: num, action,
       group: groupOf(action), amount, desc, raw: r, header});
+  }
+  return {rows: out, skipped};
+}
+// Statement summaries from a plan held outside Fidelity (an employer 401(k)): one row per statement period with
+// account_number, start_date, end_date, start_balance, end_balance, additions, transfers, withdrawals, net_earnings.
+// Each non-zero flow becomes one row dated at the period's end date, so the rest of the page treats it like any
+// other transaction. The file has no account name, so the account is called "401(k)", which sets its limit type.
+function ingestSummary(name, rows, hi){
+  const lc = rows[hi].map(c => c.trim().toLowerCase()), col = c => lc.indexOf(c);
+  const num = col("account_number"), end = col("end_date");
+  const header = {cells: rows[hi].map(c => c.trim()), num};
+  const flows = [["additions", "Additions", 1], ["withdrawals", "Withdrawals", -1], ["transfers", "Transfers", 0], ["net_earnings", "Net earnings", 0]]
+    .map(([c, action, sign]) => ({i: col(c), action, sign})).filter(f => f.i >= 0);
+  const out = []; let skipped = 0;
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length === 1 && !r[0].trim()) continue;
+    const date = parseDate(r[end]);
+    if (!date) { skipped++; continue; }
+    const acctNum = (r[num] || "").trim(), acctName = "401(k)";
+    const account = acctNum ? acctName + " ··" + acctNum.slice(-4) : acctName + " (" + name.replace(/\.[^.]+$/, "") + ")";
+    for (const f of flows) {
+      let amount = parseAmount(r[f.i]);
+      if (amount == null || amount === 0) continue;
+      // Additions and withdrawals may be written unsigned; give them the sign the rest of the page expects.
+      if (f.sign) amount = f.sign * Math.abs(amount);
+      out.push({sym: "", sec: "", secName: f.action, date, t: date.y*12 + date.m - 1, ord: date.y*10000 + date.m*100 + date.d,
+        account, acctName: acctNum ? acctName : account, acctNum, action: f.action, group: groupOf(f.action), amount, desc: "", raw: r, header});
+    }
   }
   return {rows: out, skipped};
 }
@@ -497,6 +529,22 @@ function sampleCSV(){
   L.push("", '"Sample rows generated for demonstration."');
   return L.join("\r\n");
 }
+// A plan held elsewhere, in the statement-summary layout that ingestSummary reads. Monthly periods.
+function sampleSummaryCSV(){
+  const L = ["account_number,start_date,end_date,start_balance,end_balance,additions,transfers,withdrawals,net_earnings,source_file"];
+  const iso = (y, m, d) => `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  let bal = 18000;
+  for (let y = 2023; y <= 2026; y++) for (let m = 1; m <= 12; m++) {
+    if (y === 2026 && m > 10) break;
+    const add = y === 2023 ? 1650 : y === 2024 ? 1700 : y === 2025 ? 1750 : 1800;
+    const earn = Math.round(bal * (((m * 7 + y * 3) % 9) - 3) / 400 * 100) / 100;
+    const out = y === 2025 && m === 6 ? 1200 : 0, start = bal;
+    bal = Math.round((bal + add - out + earn) * 100) / 100;
+    L.push(["PLN0055667788", iso(y, m, 1), iso(y, m, new Date(y, m, 0).getDate()), start.toFixed(2), bal.toFixed(2), add.toFixed(2), "0.00", out.toFixed(2), earn.toFixed(2), `statement-${y}-${String(m).padStart(2,"0")}.pdf`].join(","));
+  }
+  return L.join("\n");
+}
+const SAMPLE = () => [{name: "sample.csv", text: sampleCSV()}, {name: "sample-401k.csv", text: sampleSummaryCSV()}];
 
 /* ---------- state ---------- */
 const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false, view: "overview", txMode: "in", src: {files: 0, errors: [], skipped: 0, isSample: true}};
@@ -1151,7 +1199,7 @@ async function takeFiles(list){
   load(read, false);
 }
 $("#file").addEventListener("change", e => { takeFiles(e.target.files); e.target.value = ""; });
-$("#sample").addEventListener("click", () => load([{name: "sample.csv", text: sampleCSV()}], true));
+$("#sample").addEventListener("click", () => load(SAMPLE(), true));
 $("#acctFind").addEventListener("input", drawAcctBar);
 $("#acctFind").addEventListener("keydown", e => {
   if (e.key !== "Enter") return; e.preventDefault();
@@ -1182,7 +1230,7 @@ document.addEventListener("drop", e => { e.preventDefault(); ld.classList.remove
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => S.rows.length && render(), 150); });
 
 route();
-load([{name: "sample.csv", text: sampleCSV()}], true);
+load(SAMPLE(), true);
 </script>
 </body>
 </html>
