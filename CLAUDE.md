@@ -33,7 +33,7 @@ The page has two dashboards that share the header, filters and status strip. **O
 - **`render()`** always calls `drawHealth` (the status strip), then the visible view's `draw*` functions. Overview: tiles, `drawBars`, `drawLine`, `drawLimits`, `drawPace`, `drawCal`, `drawBuys`, `drawPivot`. Data: `drawSource`, `drawTypes`, `drawAccounts`, `drawSecs`, `drawTx`.
 - **Period filter:** everything from `compute()` covers `lo`..`hi` (month indexes). The pivot, streaks and copy button use `C.months`; the pace chart shows each calendar year that overlaps the period, in full, from `C.allMonths`.
 
-Row shape: `{date:{y,m,d}, t (y*12+m-1), ord (yyyymmdd), account, action, group, amount, desc, sym, sec, secName}`.
+Row shape: `{date:{y,m,d}, t (y*12+m-1), ord (yyyymmdd), account, action, group, amount, desc, sym, sec, secName, raw, header}`. `raw` is the row's cells from the file; `header` is shared by every row from the same file (`{cells, num}`, where `num` is the Account Number column index). `rawRows()` uses them on the Data view to show each transaction type's rows as they appear in the file, with account numbers shortened to the last four digits.
 
 localStorage keys (settings only, never account data): `fct-cats`, `fct-secs`, `fct-lim`.
 
