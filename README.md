@@ -8,6 +8,16 @@ A single-page dashboard that reads a Fidelity activity export (CSV) and shows ho
 2. Open `index.html` in a browser (double-click it, or serve the folder with GitHub Pages).
 3. Choose one or more CSV files. Selecting several combines accounts or date ranges; rows that appear in more than one file are counted once.
 
+### A 401(k) held outside Fidelity
+
+You can add a statement summary from another plan provider alongside your Fidelity files. The page recognises it by its header row:
+
+```
+account_number,start_date,end_date,start_balance,end_balance,additions,transfers,withdrawals,net_earnings,source_file
+```
+
+Each row (one statement period) becomes up to four rows dated at the period's end date: **Additions** (money in), **Withdrawals** (money out), and **Transfers** and **Net earnings** (left out). The account appears as **401(k)** with the last four digits of its number and counts toward the 401(k) limit. Balances are not shown. Additions usually include any employer match; if so, the limit tracker overstates your own deferrals. Contributions are only as fine-grained as the statement periods, so quarterly statements show one bar per quarter. Don't load two summaries that cover the same months with different period lengths, or the overlap is counted twice.
+
 The page opens on made-up sample data until you load your own.
 
 ## What it shows
