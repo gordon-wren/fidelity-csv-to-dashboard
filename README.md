@@ -40,6 +40,7 @@ The page has two views, switched by the tabs under the title. A row of status ba
 - **Contributions by month, quarter or year,** with withdrawals shown below the axis.
 - **Running total,** net of withdrawals.
 - **Year-over-year pace:** one cumulative line per calendar year in the period.
+- **Net deposited by account:** one line per account showing contributions minus withdrawals, added up from the account's first deposit, month by month over the period. This is not the account's value: the export has no prices, so gains and losses are not included.
 - **Consistency:** a calendar of deposit days, plus streaks and gaps.
 - **Purchases by type:** buys split into individual stocks, ETFs, mutual funds and other.
 - **Year by month table,** with a button to copy monthly totals as CSV.

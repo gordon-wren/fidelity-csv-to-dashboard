@@ -106,7 +106,7 @@ a.badge:hover{background:var(--wash)}
 .badge.crit{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,var(--surface));font-weight:600}
 .badge.warn .ic,.badge.crit .ic{color:var(--ink)}
 .tag{display:inline-block;font-size:11px;font-weight:650;color:var(--ink);border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--surface));border-radius:999px;padding:0 7px;margin-right:6px;vertical-align:1px}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .chart{position:relative}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -235,6 +235,17 @@ details>div{margin-top:10px}
         <p class="sub" id="paceNote"></p>
       </div>
       <div class="chart" id="paceWrap"><div id="pace"></div><div class="tip" id="paceTip"></div></div>
+    </section>
+
+    <section class="card w12">
+      <div class="row spread">
+        <div>
+          <h2>Net deposited by account</h2>
+          <p class="sub" id="acctLineNote"></p>
+        </div>
+        <div class="legend" id="acctLineLegend"></div>
+      </div>
+      <div class="chart" id="acctLineWrap"><div id="acctLine"></div><div class="tip" id="acctLineTip"></div></div>
     </section>
 
     <section class="card w6">
@@ -586,8 +597,9 @@ function load(files, isSample, extra = []){
   const info = new Map();
   for (const r of S.rows) { let x = info.get(r.account); if (!x) info.set(r.account, x = {id: r.account, name: r.acctName || (r.acctNum ? "" : r.account), num: r.acctNum, n: 0}); x.n++; }
   S.accts = [...info.values()].sort((a, b) => a.id.localeCompare(b.id));
-  // Last four digits, or more when two accounts share them.
-  for (const a of S.accts) { let n = 4; while (n < a.num.length && S.accts.some(b => b !== a && b.num.slice(-n) === a.num.slice(-n))) n++; a.n4 = n; a.label = (a.name || "Account") + (a.num ? " " + (n >= a.num.length ? a.num : "··" + a.num.slice(-n)) : ""); }
+  // Last four digits, or more when two accounts share them. A number of four digits or fewer (the Slavic401k
+  // converter keeps only the last four) still gets "··", since it is already shortened.
+  for (const a of S.accts) { let n = 4; while (n < a.num.length && S.accts.some(b => b !== a && b.num.slice(-n) === a.num.slice(-n))) n++; a.n4 = n; a.label = (a.name || "Account") + (a.num ? " " + (n >= a.num.length && a.num.length > 4 ? a.num : "··" + a.num.slice(-n)) : ""); }
   const find = $("#acctFind"); find.value = ""; find.hidden = S.accts.length < 5;
   drawAcctBar(); buildRanges(); buildLimYears(); render();
 }
@@ -789,7 +801,7 @@ function render(){
     const msg = () => h("div", {class: "empty"}, "Nothing is counted as a contribution yet. ", h("a", {href: "#typesCard"}, "Check the transaction types"), " and mark the right ones as money in.");
     $("#bar").replaceChildren(msg()); $("#line").replaceChildren(msg());
   } else { drawBars(C, hasOut); drawLine(C); }
-  drawLimits(); drawPace(C); drawCal(C); drawBuys(C); drawPivot(C);
+  drawLimits(); drawPace(C); drawAcctLine(C); drawCal(C); drawBuys(C); drawPivot(C);
 }
 
 /* ---------- status strip: breaches first, then neutral facts ---------- */
@@ -953,6 +965,69 @@ function drawPace(C){
     const r = svg.getBoundingClientRect(), j = Math.max(1, Math.min(12, Math.round((ev.clientX - r.left - ml) / dx)));
     ln.setAttribute("x1", x(j)); ln.setAttribute("x2", x(j)); ln.setAttribute("visibility", "visible");
     tipAt(tip, wrap, ev.clientX, 4, [h("b", null, "Through end of " + MON[j - 1]), ...series.filter(q => q.pts.length > j).map(q => tipRow(String(q.yr), usd.format(q.pts[j])))]);
+  };
+  const leave = () => { ln.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
+}
+
+// Net deposited per account: contributions minus withdrawals, added up from each account's first row (not from the
+// start of the period), shown month by month over the period. Not market value: the files have no prices.
+// Colours follow the account's place in S.accts, so an account keeps its colour whichever filter is on.
+function drawAcctLine(C){
+  const el = $("#acctLine"), tip = $("#acctLineTip"), wrap = $("#acctLineWrap"), lo = C.lo, hi = C.hi, n = hi - lo + 1;
+  tip.style.display = "none";
+  const byAcct = new Map();
+  for (const r of C.rowsA) {
+    const c = catOf(r.group); if (c === "skip" || r.t > hi) continue;
+    let a = byAcct.get(r.account); if (!a) byAcct.set(r.account, a = {first: r.t, d: new Map()});
+    a.first = Math.min(a.first, r.t); a.d.set(r.t, (a.d.get(r.t) || 0) + (c === "in" ? r.amount : -Math.abs(r.amount)));
+  }
+  const series = [];
+  S.accts.forEach((acc, i) => {
+    const a = byAcct.get(acc.id); if (!a) return;
+    let run = 0; for (const [t, v] of a.d) if (t < lo) run += v;
+    const pts = [];
+    for (let t = lo; t <= hi; t++) { run += a.d.get(t) || 0; pts.push(t < a.first ? null : run); }
+    if (pts.some(v => v != null)) series.push({acc, pts, col: i < 4 ? `var(--s${i + 1})` : "var(--muted)"});
+  });
+  $("#acctLineNote").textContent = "Contributions minus withdrawals, added up from each account's first deposit. Not market value: gains and losses are not in the export.";
+  $("#acctLineLegend").replaceChildren(...series.map(q => h("span", null, h("i", {style: "background:" + q.col}), q.acc.label)));
+  if (!series.length) { el.replaceChildren(h("div", {class: "empty"}, "Nothing is counted as a contribution yet.")); return; }
+  const vals = series.flatMap(q => q.pts.filter(v => v != null));
+  const hiV = Math.max(...vals, 0), loV = Math.min(...vals, 0), step = niceStep((hiV - loV) || 1);
+  const top = Math.max(step, Math.ceil(hiV / step) * step), bot = Math.floor(loV / step) * step;
+  const W = el.clientWidth, H = 260, ml = 50, mr = 14, mt = 14, mb = 24;
+  const x = i => ml + (n === 1 ? (W - ml - mr) / 2 : i * (W - ml - mr) / (n - 1));
+  const y = v => mt + (top - v) / (top - bot) * (H - mt - mb);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart of net deposits over time, one line per account">`;
+  for (let v = bot; v <= top + 1e-9; v += step) {
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${Math.abs(v) < 1e-9 ? "axis" : "grid"})"/>`;
+    s += `<text x="${ml - 6}" y="${y(v) + 4}" text-anchor="end">${compact(v)}</text>`;
+  }
+  const years = Math.ceil(n / 12), every = Math.max(1, Math.ceil(years * 40 / (W - ml - mr)));
+  for (let i = 0; i < n; i++) {
+    const t = lo + i, yr = Math.floor(t / 12), mo = t % 12;
+    if (n > 14 ? (mo === 0 && yr % every === 0) : (i % 3 === 0)) s += `<text x="${x(i)}" y="${H - 7}" text-anchor="${i === 0 ? "start" : "middle"}">${n > 14 ? yr : MON[mo] + " ’" + String(yr).slice(2)}</text>`;
+  }
+  s += `<line id="alX" y1="${mt}" y2="${H - mb}" stroke="var(--axis)" visibility="hidden"/>`;
+  // Lines start at the account's first month in view; the latest value gets a dot.
+  series.slice().reverse().forEach(q => {
+    let d = "", pen = false;
+    q.pts.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1); pen = true; });
+    s += `<path d="${d}" fill="none" stroke="${q.col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s += `<circle r="4" cx="${x(n - 1)}" cy="${y(q.pts[n - 1])}" fill="${q.col}" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  s += "</svg>";
+  el.innerHTML = s;
+  const svg = el.firstChild, ln = svg.querySelector("#alX");
+  const move = ev => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.round((ev.clientX - r.left - ml) / ((W - ml - mr) / Math.max(1, n - 1)))));
+    ln.setAttribute("x1", x(i)); ln.setAttribute("x2", x(i)); ln.setAttribute("visibility", "visible");
+    const live = series.filter(q => q.pts[i] != null).sort((a, b) => b.pts[i] - a.pts[i]);
+    const rows = live.map(q => tipRow(q.acc.label, usd.format(q.pts[i])));
+    if (live.length > 1) rows.push(tipRow("All shown", usd.format(live.reduce((t, q) => t + q.pts[i], 0))));
+    tipAt(tip, wrap, ev.clientX, 4, [h("b", null, "End of " + MON[(lo + i) % 12] + " " + Math.floor((lo + i) / 12)), ...(rows.length ? rows : [h("span", null, "No deposits yet")])]);
   };
   const leave = () => { ln.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
   svg.addEventListener("pointermove", move); svg.addEventListener("pointerdown", move); svg.addEventListener("pointerleave", leave);
