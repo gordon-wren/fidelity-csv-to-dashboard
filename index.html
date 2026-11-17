@@ -170,6 +170,7 @@ details>div{margin-top:10px}
       </div>
       <div class="row">
         <span class="chip" id="state">Sample data</span>
+        <label class="filebtn" for="slavic" title="Adds a Slavic401k statement summary to the files already loaded">Add Slavic401k summary<input id="slavic" type="file" accept=".csv,text/csv" multiple></label>
         <label class="filebtn primary" for="file">Choose CSV files<input id="file" type="file" accept=".csv,text/csv" multiple></label>
       </div>
     </div>
@@ -273,7 +274,7 @@ details>div{margin-top:10px}
       <p class="sub" id="status">These numbers are made up. Load your own export to replace them.</p>
       <div id="errors"></div>
       <div class="tiles" id="dataTiles"></div>
-      <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. A plan statement summary (columns account_number, start_date, end_date, additions and so on) can be added alongside; each period becomes rows for a "401(k)" account. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
+      <p class="sub muted">In Fidelity, open Activity &amp; Orders, set the date range, then Download. Pick several files at once to combine accounts or date ranges; overlapping rows are counted once. For a 401(k) at Slavic401k, convert the statement PDFs to one CSV with tools/slavic401k_to_csv.py from this project, then use Add Slavic401k summary: it adds that CSV to the files already loaded (or pick it together with your Fidelity files); each period becomes rows for a "401(k)" account. Files are read in this browser and are not uploaded. Not affiliated with Fidelity.</p>
     </section>
 
     <section class="card w7" id="typesCard">
@@ -424,12 +425,16 @@ function guessKind(sym, name){
   return "stock";
 }
 
+const SUMMARY_COLS = ["account_number", "end_date", "additions"];
+const isSummaryHeader = lc => SUMMARY_COLS.every(c => lc.includes(c));
+// True when a file is a plan statement summary (the layout ingestSummary reads), such as a Slavic401k export.
+const isSummary = text => parseCSV(text).slice(0, 60).some(r => isSummaryHeader(r.map(c => c.trim().toLowerCase())));
 function ingestFile(name, text){
   const rows = parseCSV(text);
   let hi = -1, cols = null;
   for (let i = 0; i < Math.min(rows.length, 60); i++) {
     const lc = rows[i].map(c => c.trim().toLowerCase());
-    if (["account_number", "end_date", "additions"].every(c => lc.includes(c))) return ingestSummary(name, rows, i);
+    if (isSummaryHeader(lc)) return ingestSummary(name, rows, i);
     const d = lc.findIndex(c => /^(run date|date|trade date|transaction date)$/.test(c));
     const a = lc.findIndex(c => /^amount/.test(c));
     if (d >= 0 && a >= 0) {
@@ -547,7 +552,7 @@ function sampleSummaryCSV(){
 const SAMPLE = () => [{name: "sample.csv", text: sampleCSV()}, {name: "sample-401k.csv", text: sampleSummaryCSV()}];
 
 /* ---------- state ---------- */
-const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false, view: "overview", txMode: "in", src: {files: 0, errors: [], skipped: 0, isSample: true}};
+const S = {rows: [], gran: "month", range: "all", account: "all", overrides: {}, showAll: false, view: "overview", txMode: "in", src: {files: 0, errors: [], skipped: 0, isSample: true}, files: []};
 try { S.overrides = JSON.parse(localStorage.getItem("fct-cats") || "{}") || {}; } catch (e) {}
 const catOf = g => S.overrides[g] || defaultCat(g);
 S.secs = {}; try { S.secs = JSON.parse(localStorage.getItem("fct-secs") || "{}") || {}; } catch (e) {}
@@ -560,8 +565,10 @@ function unrecognised(){
   return g;
 }
 
-function load(files, isSample){
+// files: [{name, text}] read in this browser. extra: errors found before parsing (shown with the parser's own).
+function load(files, isSample, extra = []){
   const res = ingest(files);
+  res.errors.unshift(...extra);
   const errBox = $("#errors"); errBox.replaceChildren(...res.errors.map(e => h("p", {class: "err"}, e)));
   if (!res.rows.length) {
     if (!res.errors.length) errBox.append(h("p", {class: "err"}, "No dated rows with an amount were found in that file."));
@@ -569,11 +576,13 @@ function load(files, isSample){
     return;
   }
   S.rows = res.rows.sort((a, b) => a.ord - b.ord); S.account = "all"; S.range = "all"; S.showAll = false;
-  S.src = {files: files.length - res.errors.length, errors: res.errors, skipped: res.skipped, isSample: !!isSample};
+  const nFiles = files.length - res.errors.length + extra.length;
+  S.src = {files: nFiles, errors: res.errors, skipped: res.skipped, isSample: !!isSample};
+  S.files = isSample ? [] : files;
   const st = $("#state"); st.textContent = isSample ? "Sample data" : "Your data"; st.className = "chip" + (isSample ? "" : " live");
   const a = S.rows[0].date, b = S.rows[S.rows.length-1].date;
   $("#status").textContent = isSample ? "These numbers are made up. Load your own export to replace them."
-    : `${files.length - res.errors.length} file${files.length - res.errors.length === 1 ? "" : "s"}, ${S.rows.length.toLocaleString()} transactions, ${MON[a.m-1]} ${a.y} to ${MON[b.m-1]} ${b.y}.` + (res.skipped ? ` ${res.skipped} non-data line${res.skipped === 1 ? "" : "s"} skipped.` : "");
+    : `${nFiles} file${nFiles === 1 ? "" : "s"}, ${S.rows.length.toLocaleString()} transactions, ${MON[a.m-1]} ${a.y} to ${MON[b.m-1]} ${b.y}.` + (res.skipped ? ` ${res.skipped} non-data line${res.skipped === 1 ? "" : "s"} skipped.` : "");
   const info = new Map();
   for (const r of S.rows) { let x = info.get(r.account); if (!x) info.set(r.account, x = {id: r.account, name: r.acctName || (r.acctNum ? "" : r.account), num: r.acctNum, n: 0}); x.n++; }
   S.accts = [...info.values()].sort((a, b) => a.id.localeCompare(b.id));
@@ -1193,12 +1202,25 @@ function route(){
 }
 
 /* ---------- events ---------- */
+const readAll = list => Promise.all([...list].map(async f => ({name: f.name, text: await f.text()})));
 async function takeFiles(list){
-  const files = [...list]; if (!files.length) return;
-  const read = await Promise.all(files.map(async f => ({name: f.name, text: await f.text()})));
+  const read = await readAll(list); if (!read.length) return;
   load(read, false);
 }
+// Slavic401k: accepts only statement summaries, and adds them to the files already loaded, replacing any
+// earlier summary. Over sample data it starts fresh, so made-up rows never mix with real ones.
+async function takeSummaries(list){
+  const read = await readAll(list); if (!read.length) return;
+  const good = read.filter(f => isSummary(f.text));
+  const extra = read.filter(f => !good.includes(f)).map(f => /\.pdf$/i.test(f.name)
+    ? f.name + " is a PDF. Convert Slavic401k statements to one CSV first with tools/slavic401k_to_csv.py (see the README), then add that CSV."
+    : f.name + " is not a Slavic401k statement summary. It needs a header row with account_number, end_date and additions. Use Choose CSV files for Fidelity exports.");
+  // With no usable file, keep the earlier summary too, so a wrong pick only shows the error.
+  const keep = S.src.isSample ? [] : good.length ? S.files.filter(f => !isSummary(f.text)) : S.files;
+  load(keep.concat(good), false, extra);
+}
 $("#file").addEventListener("change", e => { takeFiles(e.target.files); e.target.value = ""; });
+$("#slavic").addEventListener("change", e => { takeSummaries(e.target.files); e.target.value = ""; });
 $("#sample").addEventListener("click", () => load(SAMPLE(), true));
 $("#acctFind").addEventListener("input", drawAcctBar);
 $("#acctFind").addEventListener("keydown", e => {

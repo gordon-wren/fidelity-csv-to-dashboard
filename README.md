@@ -8,9 +8,18 @@ A single-page dashboard that reads a Fidelity activity export (CSV) and shows ho
 2. Open `index.html` in a browser (double-click it, or serve the folder with GitHub Pages).
 3. Choose one or more CSV files. Selecting several combines accounts or date ranges; rows that appear in more than one file are counted once.
 
-### A 401(k) held outside Fidelity
+### A 401(k) at Slavic401k (or another plan provider)
 
-You can add a statement summary from another plan provider alongside your Fidelity files. The page recognises it by its header row:
+Slavic401k statements are PDFs, so convert them to one CSV first with the script in `tools/`. It runs on your computer and sends nothing anywhere:
+
+```
+pip3 install pdfplumber
+python3 tools/slavic401k_to_csv.py ~/Documents/401k -o summary.csv
+```
+
+Pass a folder of statement PDFs or the PDF files themselves. It prints `ok` or `FAIL` for each statement and warns when a statement's numbers don't add up. It keeps only the last four digits of the account number.
+
+Then load your Fidelity files, press **Add Slavic401k summary** and pick `summary.csv`. It is added to the files already loaded. Picking a new summary later replaces the old one, and your Fidelity files stay. **Choose CSV files** still replaces everything, so if you use it again, add the summary again afterwards (or pick it together with the Fidelity files in the same dialog). The Slavic401k button only accepts a statement summary, recognised by its header row:
 
 ```
 account_number,start_date,end_date,start_balance,end_balance,additions,transfers,withdrawals,net_earnings,source_file

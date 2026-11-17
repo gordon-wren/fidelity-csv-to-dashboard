@@ -10,7 +10,8 @@ A single-page dashboard that parses a Fidelity activity export (CSV) in the brow
 
 - `index.html` is the whole app: markup, CSS and one inline `<script>`. No build step, no dependencies, no network calls.
 - `README.md` is user-facing. Update it when behaviour a user would notice changes.
-- `.gitignore` excludes `*.csv`. Never commit a real export; use synthetic rows for fixtures.
+- `tools/slavic401k_to_csv.py` converts Slavic401k statement PDFs to the summary CSV that `ingestSummary` reads (Python, needs `pdfplumber`, run by hand; the app itself never depends on it). If you change the summary columns, change both.
+- `.gitignore` excludes `*.csv` and `*.pdf`. Never commit a real export; use synthetic rows for fixtures.
 
 ## Run and check
 
@@ -24,7 +25,7 @@ The page has two dashboards that share the header, filters and status strip. **O
 
 ## Script map (in file order)
 
-- **Parsing:** `parseCSV`, `parseDate`, `parseAmount`, `ingestFile` (finds the header row by a Date + Amount column, maps columns by name), `ingestSummary` (a plan statement summary from outside Fidelity, detected in `ingestFile` by `account_number` + `end_date` + `additions` columns: each period becomes Additions / Withdrawals / Transfers / Net earnings rows at `end_date`, in an account named "401(k)"), `ingest` (merges files, counts rows duplicated across files once).
+- **Parsing:** `parseCSV`, `parseDate`, `parseAmount`, `ingestFile` (finds the header row by a Date + Amount column, maps columns by name), `ingestSummary` (a plan statement summary from outside Fidelity, detected in `ingestFile` by `account_number` + `end_date` + `additions` columns: each period becomes Additions / Withdrawals / Transfers / Net earnings rows at `end_date`, in an account named "401(k)"), `isSummary` (same header test, used by the Slavic401k button), `ingest` (merges files, counts rows duplicated across files once).
 - **Transaction types:** `PREFIXES` maps known Fidelity action prefixes to `in` / `out` / `skip`. `groupOf` normalises an action to a group; `defaultCat` is the fallback; `catOf` applies user overrides. `unrecognised()` lists groups with no known prefix and no override; it drives the status strip warning and sorts those types first on the Data view. `DEFAULTS = Object.fromEntries(PREFIXES)`, so to change how a known action is treated, edit `PREFIXES`.
 - **Holding types:** `guessKind(sym, name)` returns `stock` / `etf` / `fund` / `other` / `skip`; `kindOf` applies overrides; `isBuy` decides what counts as a purchase (a row with a security whose group is in the `BUYS` set or is categorised `in`).
 - **Limits:** `LIMITS` table (under-50 amounts by year), `acctKind` guesses account type from its name, `taxYear` gives the tax year for limits: a deposit to an IRA/HSA account made January to April (`canBePrior`) takes the viewer's override if there is one, otherwise `labelYear` (prior-year wording or an explicit previous year in the action or description). `drawTaxYears` (Data view) lists those deposits with a year picker. Overrides are keyed by `rowKey`, a hash of the row, `limitKinds` lists the limit types present, `limitFor(kind, year)` sums one limit, `drawLimits`, `drawAccounts` (account type settings, Data view). `drawLimits` and the status strip read `S.rows` directly (all accounts, by `taxYear`), not `compute()`; it ignores the account and period filters on purpose. The limit input redraws only the limits panel and the status strip.
@@ -54,7 +55,7 @@ localStorage keys (settings only, never account data): `fct-cats`, `fct-secs`, `
 
 - The parser was written from the documented export layout and has not been checked against a real file. Expect quirks.
 - Transaction and holding classification are heuristics; unknown action types default to "leave out", which can undercount silently.
-- Loaded data is not kept between visits; choosing files replaces the current set.
+- Loaded data is not kept between visits; "Choose CSV files" replaces the current set. "Add Slavic401k summary" (`takeSummaries`) keeps the loaded non-summary files (`S.files`, in memory only) and replaces any earlier summary.
 - With long histories the bar charts scroll sideways and the y-axis scrolls out of view.
 - Limits: employer match is counted if the file does not label it; no catch-up toggle; 2027 401(k)/IRA limits are not in `LIMITS` (not yet published when this was written).
 
