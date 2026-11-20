@@ -36,7 +36,7 @@ The page has two views, switched by the tabs under the title. A row of status ba
 **Overview**, for checking whether you're on track:
 
 - **Annual limit tracker:** progress against IRA, 401(k) and HSA limits, with the monthly amount needed to max out.
-- **Headline numbers:** contributed this year against the prior year's pace, then total, average and median per month, withdrawals and net for the selected period.
+- **Headline numbers:** for the year chosen in the limits panel's **Tax year** picker: contributed that year against the year before (through the same date for the current year), number of deposits, average and median per month, withdrawals and net. They follow the account filter but not the period filter, and count by deposit date, so a prior-year IRA deposit made in March counts in that calendar year here.
 - **Contributions by month, quarter or year,** with withdrawals shown below the axis.
 - **Running total,** net of withdrawals.
 - **Year-over-year pace:** one cumulative line per calendar year in the period.

@@ -754,13 +754,7 @@ function compute(){
     if (div === 3) return "Q" + (k % 4 + 1) + " " + Math.floor(k / 4);
     return String(k);
   }
-  // latest-year pace against the prior year through the same date
-  const ly = last.date.y, cut = last.date.m * 100 + last.date.d; let cur = 0, prev = 0;
-  for (const {r, c} of counted) if (c === "in") {
-    if (r.date.y === ly) cur += r.amount;
-    else if (r.date.y === ly - 1 && r.date.m * 100 + r.date.d <= cut) prev += r.amount;
-  }
-  return {buyTot, months, periods, allMonths, minT, maxT, last, lo, hi, cur, prev, ly,
+  return {buyTot, months, periods, allMonths, minT, maxT, last, lo, hi,
     counted: counted.filter(x => x.r.t >= lo && x.r.t <= hi), rowsA,
     totIn: months.reduce((s, m) => s + m.in, 0), totOut: months.reduce((s, m) => s + m.out, 0)};
 }
@@ -771,17 +765,7 @@ function render(){
   S.last = C;
   drawHealth(C);
   if (S.view === "data") { drawSource(); drawTypes(C); drawAccounts(); drawSecs(C); drawTaxYears(); drawTx(C); return; }
-  const rangeName = S.range.startsWith("y:") ? S.range.slice(2) : {all: "all time", "12m": "last 12 months", "3y": "last 3 years"}[S.range];
-  const tile = (k, v, n, size) => h("div", {class: "tile " + size}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
-  const ld = C.last.date, nOut = C.counted.filter(x => x.c === "out").length;
-  const delta = C.prev > 0 ? `${C.cur >= C.prev ? "Up" : "Down"} ${Math.abs(Math.round((C.cur / C.prev - 1) * 100))}% on ${C.ly - 1} through ${MON[ld.m-1]} ${ld.d} (${usd.format(C.prev)})` : `Through ${MON[ld.m-1]} ${ld.d}`;
-  $("#tiles").replaceChildren(
-    tile(`Contributed in ${C.ly} so far`, usd.format(C.cur), delta, "hero"),
-    tile("Contributed, " + rangeName, usd.format(C.totIn), `${C.counted.filter(x => x.c === "in").length} deposits`, "sm"),
-    tile("Average per month", usd.format(C.totIn / C.months.length), `Median ${usd.format(median(C.months.map(m => m.in)))}`, "sm"),
-    tile("Withdrawn, " + rangeName, usd.format(C.totOut), `${nOut} withdrawal${nOut === 1 ? "" : "s"}`, "sm"),
-    tile("Net in, " + rangeName, usd.format(C.totIn - C.totOut), "Contributed minus withdrawn", "sm")
-  );
+  drawTiles(C);
   $("#barTitle").textContent = "Contributions by " + S.gran;
   const hasOut = C.totOut > 0;
   $("#barLegend").replaceChildren(...(hasOut ? [h("span", null, h("i", {style: "background:var(--s1)"}), "Contributed"), h("span", null, h("i", {style: "background:var(--sx)"}), "Withdrawn")] : []));
@@ -790,6 +774,34 @@ function render(){
     $("#bar").replaceChildren(msg()); $("#line").replaceChildren(msg());
   } else { drawBars(C, hasOut); drawLine(C); }
   drawLimits(); drawPace(C); drawCal(C); drawBuys(C); drawPivot(C);
+}
+
+// Headline tiles beside the limits panel. They follow the tax year picker (S.limYear) and the account filter, not the
+// period filter. Years here are calendar years by deposit date; the limits panel counts by taxYear, so a prior-year
+// IRA deposit made in March shows in this year's tiles but last year's limit.
+function drawTiles(C){
+  const tile = (k, v, n, size) => h("div", {class: "tile " + size}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, n));
+  const Y = S.limYear, ld = C.last.date, isLast = Y === ld.y, cut = ld.m * 100 + ld.d;
+  let cur = 0, prev = 0, nIn = 0, big = 0, out = 0, nOut = 0;
+  const byMonth = new Array(12).fill(0);
+  for (const r of C.rowsA) {
+    const c = catOf(r.group); if (c === "skip") continue;
+    if (r.date.y === Y) {
+      if (c === "in") { cur += r.amount; byMonth[r.date.m - 1] += r.amount; if (r.amount > 0) { nIn++; big = Math.max(big, r.amount); } }
+      else { out += Math.abs(r.amount); nOut++; }
+    } else if (r.date.y === Y - 1 && c === "in" && (!isLast || r.date.m * 100 + r.date.d <= cut)) prev += r.amount;
+  }
+  // Months of the year that the data covers: not before the first row, not after the last.
+  const m0 = Math.max(C.minT, Y * 12), m1 = Math.min(C.maxT, Y * 12 + 11), months = byMonth.slice(m0 - Y * 12, m1 - Y * 12 + 1);
+  const through = isLast ? ` through ${MON[ld.m-1]} ${ld.d}` : "";
+  const delta = prev > 0 ? `${cur >= prev ? "Up" : "Down"} ${Math.abs(Math.round((cur / prev - 1) * 100))}% on ${Y - 1}${through} (${usd.format(prev)})` : isLast ? `Through ${MON[ld.m-1]} ${ld.d}` : `No contributions in ${Y - 1} to compare`;
+  $("#tiles").replaceChildren(
+    tile(`Contributed in ${Y}${isLast ? " so far" : ""}`, usd.format(cur), delta, "hero"),
+    tile(`Deposits in ${Y}`, nIn.toLocaleString(), nIn ? `Largest ${usd.format(big)}` : "None", "sm"),
+    tile(`Average per month, ${Y}`, usd.format(months.length ? cur / months.length : 0), months.length ? `Median ${usd.format(median(months))}` : "No data this year", "sm"),
+    tile(`Withdrawn in ${Y}`, usd.format(out), `${nOut} withdrawal${nOut === 1 ? "" : "s"}`, "sm"),
+    tile(`Net in, ${Y}`, usd.format(cur - out), "Contributed minus withdrawn", "sm")
+  );
 }
 
 /* ---------- status strip: breaches first, then neutral facts ---------- */
@@ -1227,7 +1239,7 @@ $("#acctFind").addEventListener("keydown", e => {
   if (e.key !== "Enter") return; e.preventDefault();
   const b = $("#accts button[data-match]"); if (b) b.click();
 });
-$("#limYear").addEventListener("change", e => { S.limYear = +e.target.value; drawLimits(); });
+$("#limYear").addEventListener("change", e => { S.limYear = +e.target.value; drawLimits(); if (S.last) drawTiles(S.last); });
 $("#range").addEventListener("change", e => { S.range = e.target.value; S.showAll = false; render(); });
 $("#gran").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
